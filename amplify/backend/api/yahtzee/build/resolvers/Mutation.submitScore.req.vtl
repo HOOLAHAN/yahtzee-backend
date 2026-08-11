@@ -1,0 +1,37 @@
+#set($id = $util.defaultIfNull($ctx.args.id, $util.autoId()))
+#set($timestamp = $util.time.nowISO8601())
+#set($username = $ctx.identity.claims.get("preferred_username"))
+#if($util.isNullOrBlank($username))
+  #set($username = $ctx.identity.claims.get("email"))
+#end
+#if($util.isNullOrBlank($username))
+  #set($username = $ctx.identity.claims.get("cognito:username"))
+#end
+#if($util.isNullOrBlank($username))
+  #set($username = $ctx.identity.claims.get("username"))
+#end
+#if($util.isNullOrBlank($username))
+  #set($username = $ctx.identity.username)
+#end
+#if($util.isNullOrBlank($username))
+  #set($username = "Player")
+#end
+{
+  "version": "2018-05-29",
+  "operation": "PutItem",
+  "key": {
+    "id": $util.dynamodb.toDynamoDBJson($id)
+  },
+  "attributeValues": {
+    "userId": $util.dynamodb.toDynamoDBJson($ctx.identity.sub),
+    "username": $util.dynamodb.toDynamoDBJson($username),
+    "score": $util.dynamodb.toDynamoDBJson($ctx.args.score),
+    "timestamp": $util.dynamodb.toDynamoDBJson($timestamp),
+    "createdAt": $util.dynamodb.toDynamoDBJson($timestamp),
+    "updatedAt": $util.dynamodb.toDynamoDBJson($timestamp),
+    "__typename": $util.dynamodb.toDynamoDBJson("Score")
+  },
+  "condition": {
+    "expression": "attribute_not_exists(id)"
+  }
+}

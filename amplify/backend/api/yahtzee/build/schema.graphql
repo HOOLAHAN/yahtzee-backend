@@ -1,0 +1,450 @@
+type Score @aws_cognito_user_pools @aws_api_key {
+  id: ID!
+  userId: String!
+  username: String!
+  score: Int!
+  timestamp: AWSDateTime!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+enum GameMode {
+  SOLO
+  DAILY
+}
+
+type GameResult @aws_cognito_user_pools @aws_api_key {
+  id: ID!
+  userId: String!
+  username: String!
+  mode: GameMode!
+  modeDate: String!
+  challengeDate: AWSDate
+  score: Int!
+  completedAt: AWSDateTime!
+  yahtzeeCount: Int!
+  earnedUpperBonus: Boolean!
+  completedSmallStraight: Boolean!
+  completedLargeStraight: Boolean!
+  noZeroScores: Boolean!
+  yahtzeeOnFinalRoll: Boolean!
+  scorecard: AWSJSON
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+input SubmitGameResultInput {
+  id: ID!
+  mode: GameMode!
+  challengeDate: AWSDate
+  score: Int!
+  yahtzeeCount: Int!
+  earnedUpperBonus: Boolean!
+  completedSmallStraight: Boolean!
+  completedLargeStraight: Boolean!
+  noZeroScores: Boolean!
+  yahtzeeOnFinalRoll: Boolean!
+  scorecard: AWSJSON
+}
+
+type DailyRoundStanding @aws_cognito_user_pools {
+  challengeDate: AWSDate!
+  round: Int!
+  score: Int!
+  rank: Int!
+  playerCount: Int!
+  percentile: Int!
+}
+
+type Mutation {
+  submitScore(id: ID, score: Int!): Score @aws_cognito_user_pools
+  submitGameResult(input: SubmitGameResultInput!): GameResult @aws_cognito_user_pools
+  submitDailyRoundProgress(challengeDate: AWSDate!, round: Int!, score: Int!): DailyRoundStanding! @aws_cognito_user_pools
+  updateMyProfile(username: String!, firstName: String!, lastName: String!): UserProfile @aws_cognito_user_pools
+  updateMyPreferences(scoreSuggestionsEnabled: Boolean!, dailyReminderEnabled: Boolean!, dailyReminderHour: Int!): UserProfile @aws_cognito_user_pools
+  deleteMyProfile: Boolean! @aws_cognito_user_pools
+  createScore(input: CreateScoreInput!, condition: ModelScoreConditionInput): Score
+  updateScore(input: UpdateScoreInput!, condition: ModelScoreConditionInput): Score
+  deleteScore(input: DeleteScoreInput!, condition: ModelScoreConditionInput): Score
+  createGameResult(input: CreateGameResultInput!, condition: ModelGameResultConditionInput): GameResult
+  updateGameResult(input: UpdateGameResultInput!, condition: ModelGameResultConditionInput): GameResult
+  deleteGameResult(input: DeleteGameResultInput!, condition: ModelGameResultConditionInput): GameResult
+}
+
+type Query {
+  myProfile: UserProfile @aws_cognito_user_pools
+  usernameAvailable(username: String!): Boolean! @aws_api_key
+  getScore(id: ID!): Score @aws_api_key @aws_cognito_user_pools
+  listScores(filter: ModelScoreFilterInput, limit: Int, nextToken: String): ModelScoreConnection @aws_api_key @aws_cognito_user_pools
+  getGameResult(id: ID!): GameResult @aws_api_key @aws_cognito_user_pools
+  listGameResults(filter: ModelGameResultFilterInput, limit: Int, nextToken: String): ModelGameResultConnection @aws_api_key @aws_cognito_user_pools
+  gameResultsByUser(userId: String!, completedAt: ModelStringKeyConditionInput, sortDirection: ModelSortDirection, filter: ModelGameResultFilterInput, limit: Int, nextToken: String): ModelGameResultConnection @aws_api_key @aws_cognito_user_pools
+  gameResultsByModeDate(modeDate: String!, score: ModelIntKeyConditionInput, sortDirection: ModelSortDirection, filter: ModelGameResultFilterInput, limit: Int, nextToken: String): ModelGameResultConnection @aws_api_key @aws_cognito_user_pools
+}
+
+type UserProfile @aws_cognito_user_pools {
+  userId: ID!
+  username: String!
+  firstName: String!
+  lastName: String!
+  scoreSuggestionsEnabled: Boolean!
+  dailyReminderEnabled: Boolean!
+  dailyReminderHour: Int!
+}
+
+input ModelStringInput {
+  ne: String
+  eq: String
+  le: String
+  lt: String
+  ge: String
+  gt: String
+  contains: String
+  notContains: String
+  between: [String]
+  beginsWith: String
+  attributeExists: Boolean
+  attributeType: ModelAttributeTypes
+  size: ModelSizeInput
+}
+
+input ModelIntInput {
+  ne: Int
+  eq: Int
+  le: Int
+  lt: Int
+  ge: Int
+  gt: Int
+  between: [Int]
+  attributeExists: Boolean
+  attributeType: ModelAttributeTypes
+}
+
+input ModelFloatInput {
+  ne: Float
+  eq: Float
+  le: Float
+  lt: Float
+  ge: Float
+  gt: Float
+  between: [Float]
+  attributeExists: Boolean
+  attributeType: ModelAttributeTypes
+}
+
+input ModelBooleanInput {
+  ne: Boolean
+  eq: Boolean
+  attributeExists: Boolean
+  attributeType: ModelAttributeTypes
+}
+
+input ModelIDInput {
+  ne: ID
+  eq: ID
+  le: ID
+  lt: ID
+  ge: ID
+  gt: ID
+  contains: ID
+  notContains: ID
+  between: [ID]
+  beginsWith: ID
+  attributeExists: Boolean
+  attributeType: ModelAttributeTypes
+  size: ModelSizeInput
+}
+
+input ModelSubscriptionStringInput {
+  ne: String
+  eq: String
+  le: String
+  lt: String
+  ge: String
+  gt: String
+  contains: String
+  notContains: String
+  between: [String]
+  beginsWith: String
+  in: [String]
+  notIn: [String]
+}
+
+input ModelSubscriptionIntInput {
+  ne: Int
+  eq: Int
+  le: Int
+  lt: Int
+  ge: Int
+  gt: Int
+  between: [Int]
+  in: [Int]
+  notIn: [Int]
+}
+
+input ModelSubscriptionFloatInput {
+  ne: Float
+  eq: Float
+  le: Float
+  lt: Float
+  ge: Float
+  gt: Float
+  between: [Float]
+  in: [Float]
+  notIn: [Float]
+}
+
+input ModelSubscriptionBooleanInput {
+  ne: Boolean
+  eq: Boolean
+}
+
+input ModelSubscriptionIDInput {
+  ne: ID
+  eq: ID
+  le: ID
+  lt: ID
+  ge: ID
+  gt: ID
+  contains: ID
+  notContains: ID
+  between: [ID]
+  beginsWith: ID
+  in: [ID]
+  notIn: [ID]
+}
+
+enum ModelAttributeTypes {
+  binary
+  binarySet
+  bool
+  list
+  map
+  number
+  numberSet
+  string
+  stringSet
+  _null
+}
+
+input ModelSizeInput {
+  ne: Int
+  eq: Int
+  le: Int
+  lt: Int
+  ge: Int
+  gt: Int
+  between: [Int]
+}
+
+enum ModelSortDirection {
+  ASC
+  DESC
+}
+
+type ModelScoreConnection @aws_api_key @aws_cognito_user_pools {
+  items: [Score]!
+  nextToken: String
+}
+
+input ModelScoreFilterInput {
+  id: ModelIDInput
+  userId: ModelStringInput
+  username: ModelStringInput
+  score: ModelIntInput
+  timestamp: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+  and: [ModelScoreFilterInput]
+  or: [ModelScoreFilterInput]
+  not: ModelScoreFilterInput
+}
+
+input ModelScoreConditionInput {
+  userId: ModelStringInput
+  username: ModelStringInput
+  score: ModelIntInput
+  timestamp: ModelStringInput
+  and: [ModelScoreConditionInput]
+  or: [ModelScoreConditionInput]
+  not: ModelScoreConditionInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateScoreInput {
+  id: ID
+  userId: String!
+  username: String!
+  score: Int!
+  timestamp: AWSDateTime!
+}
+
+input UpdateScoreInput {
+  id: ID!
+  userId: String
+  username: String
+  score: Int
+  timestamp: AWSDateTime
+}
+
+input DeleteScoreInput {
+  id: ID!
+}
+
+input ModelSubscriptionScoreFilterInput {
+  id: ModelSubscriptionIDInput
+  userId: ModelSubscriptionStringInput
+  username: ModelSubscriptionStringInput
+  score: ModelSubscriptionIntInput
+  timestamp: ModelSubscriptionStringInput
+  createdAt: ModelSubscriptionStringInput
+  updatedAt: ModelSubscriptionStringInput
+  and: [ModelSubscriptionScoreFilterInput]
+  or: [ModelSubscriptionScoreFilterInput]
+}
+
+type Subscription {
+  onCreateScore(filter: ModelSubscriptionScoreFilterInput): Score @aws_subscribe(mutations: ["createScore"]) @aws_api_key @aws_cognito_user_pools
+  onUpdateScore(filter: ModelSubscriptionScoreFilterInput): Score @aws_subscribe(mutations: ["updateScore"]) @aws_api_key @aws_cognito_user_pools
+  onDeleteScore(filter: ModelSubscriptionScoreFilterInput): Score @aws_subscribe(mutations: ["deleteScore"]) @aws_api_key @aws_cognito_user_pools
+  onCreateGameResult(filter: ModelSubscriptionGameResultFilterInput): GameResult @aws_subscribe(mutations: ["createGameResult"]) @aws_api_key @aws_cognito_user_pools
+  onUpdateGameResult(filter: ModelSubscriptionGameResultFilterInput): GameResult @aws_subscribe(mutations: ["updateGameResult"]) @aws_api_key @aws_cognito_user_pools
+  onDeleteGameResult(filter: ModelSubscriptionGameResultFilterInput): GameResult @aws_subscribe(mutations: ["deleteGameResult"]) @aws_api_key @aws_cognito_user_pools
+}
+
+type ModelGameResultConnection @aws_api_key @aws_cognito_user_pools {
+  items: [GameResult]!
+  nextToken: String
+}
+
+input ModelGameModeInput {
+  eq: GameMode
+  ne: GameMode
+}
+
+input ModelGameResultFilterInput {
+  id: ModelIDInput
+  userId: ModelStringInput
+  username: ModelStringInput
+  mode: ModelGameModeInput
+  modeDate: ModelStringInput
+  challengeDate: ModelStringInput
+  score: ModelIntInput
+  completedAt: ModelStringInput
+  yahtzeeCount: ModelIntInput
+  earnedUpperBonus: ModelBooleanInput
+  completedSmallStraight: ModelBooleanInput
+  completedLargeStraight: ModelBooleanInput
+  noZeroScores: ModelBooleanInput
+  yahtzeeOnFinalRoll: ModelBooleanInput
+  scorecard: ModelStringInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+  and: [ModelGameResultFilterInput]
+  or: [ModelGameResultFilterInput]
+  not: ModelGameResultFilterInput
+}
+
+input ModelGameResultConditionInput {
+  userId: ModelStringInput
+  username: ModelStringInput
+  mode: ModelGameModeInput
+  modeDate: ModelStringInput
+  challengeDate: ModelStringInput
+  score: ModelIntInput
+  completedAt: ModelStringInput
+  yahtzeeCount: ModelIntInput
+  earnedUpperBonus: ModelBooleanInput
+  completedSmallStraight: ModelBooleanInput
+  completedLargeStraight: ModelBooleanInput
+  noZeroScores: ModelBooleanInput
+  yahtzeeOnFinalRoll: ModelBooleanInput
+  scorecard: ModelStringInput
+  and: [ModelGameResultConditionInput]
+  or: [ModelGameResultConditionInput]
+  not: ModelGameResultConditionInput
+  createdAt: ModelStringInput
+  updatedAt: ModelStringInput
+}
+
+input CreateGameResultInput {
+  id: ID
+  userId: String!
+  username: String!
+  mode: GameMode!
+  modeDate: String!
+  challengeDate: AWSDate
+  score: Int!
+  completedAt: AWSDateTime!
+  yahtzeeCount: Int!
+  earnedUpperBonus: Boolean!
+  completedSmallStraight: Boolean!
+  completedLargeStraight: Boolean!
+  noZeroScores: Boolean!
+  yahtzeeOnFinalRoll: Boolean!
+  scorecard: AWSJSON
+}
+
+input UpdateGameResultInput {
+  id: ID!
+  userId: String
+  username: String
+  mode: GameMode
+  modeDate: String
+  challengeDate: AWSDate
+  score: Int
+  completedAt: AWSDateTime
+  yahtzeeCount: Int
+  earnedUpperBonus: Boolean
+  completedSmallStraight: Boolean
+  completedLargeStraight: Boolean
+  noZeroScores: Boolean
+  yahtzeeOnFinalRoll: Boolean
+  scorecard: AWSJSON
+}
+
+input DeleteGameResultInput {
+  id: ID!
+}
+
+input ModelSubscriptionGameResultFilterInput {
+  id: ModelSubscriptionIDInput
+  userId: ModelSubscriptionStringInput
+  username: ModelSubscriptionStringInput
+  mode: ModelSubscriptionStringInput
+  modeDate: ModelSubscriptionStringInput
+  challengeDate: ModelSubscriptionStringInput
+  score: ModelSubscriptionIntInput
+  completedAt: ModelSubscriptionStringInput
+  yahtzeeCount: ModelSubscriptionIntInput
+  earnedUpperBonus: ModelSubscriptionBooleanInput
+  completedSmallStraight: ModelSubscriptionBooleanInput
+  completedLargeStraight: ModelSubscriptionBooleanInput
+  noZeroScores: ModelSubscriptionBooleanInput
+  yahtzeeOnFinalRoll: ModelSubscriptionBooleanInput
+  scorecard: ModelSubscriptionStringInput
+  createdAt: ModelSubscriptionStringInput
+  updatedAt: ModelSubscriptionStringInput
+  and: [ModelSubscriptionGameResultFilterInput]
+  or: [ModelSubscriptionGameResultFilterInput]
+}
+
+input ModelStringKeyConditionInput {
+  eq: String
+  le: String
+  lt: String
+  ge: String
+  gt: String
+  between: [String]
+  beginsWith: String
+}
+
+input ModelIntKeyConditionInput {
+  eq: Int
+  le: Int
+  lt: Int
+  ge: Int
+  gt: Int
+  between: [Int]
+}

@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "serviceConfiguration": {
+    "apiName": "yahtzee",
+    "serviceName": "AppSync",
+    "defaultAuthType": {
+      "mode": "API_KEY",
+      "expirationTime": 365,
+      "keyDescription": "Yahtzee web leaderboard"
+    },
+    "additionalAuthTypes": [
+      {
+        "mode": "AMAZON_COGNITO_USER_POOLS",
+        "cognitoUserPoolId": "yahtzeeb456dc42"
+      }
+    ],
+    "conflictResolution": {}
+  }
+}

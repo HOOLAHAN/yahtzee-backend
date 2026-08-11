@@ -1,0 +1,11 @@
+{
+  "name": "yahtzee-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "status": "AWS_PROFILE=iain-hoolahan npx @aws-amplify/cli@14.5.1 status",
+    "deploy:sandbox": "node scripts/push-sandbox-backend.mjs",
+    "deploy:profile:sandbox": "node scripts/deploy-profile-sandbox.mjs"
+  }
+}

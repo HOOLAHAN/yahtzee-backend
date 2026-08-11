@@ -1,0 +1,1420 @@
+{
+  "Parameters": {
+    "DynamoDBModelTableReadIOPS": {
+      "Type": "Number",
+      "Default": 5,
+      "Description": "The number of read IOPS the table should support."
+    },
+    "DynamoDBModelTableWriteIOPS": {
+      "Type": "Number",
+      "Default": 5,
+      "Description": "The number of write IOPS the table should support."
+    },
+    "DynamoDBBillingMode": {
+      "Type": "String",
+      "Default": "PAY_PER_REQUEST",
+      "AllowedValues": [
+        "PAY_PER_REQUEST",
+        "PROVISIONED"
+      ],
+      "Description": "Configure @model types to create DynamoDB tables with PAY_PER_REQUEST or PROVISIONED billing modes."
+    },
+    "DynamoDBEnablePointInTimeRecovery": {
+      "Type": "String",
+      "Default": "false",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Whether to enable Point in Time Recovery on the table."
+    },
+    "DynamoDBEnableServerSideEncryption": {
+      "Type": "String",
+      "Default": "true",
+      "AllowedValues": [
+        "true",
+        "false"
+      ],
+      "Description": "Enable server side encryption powered by KMS."
+    },
+    "referencetotransformerrootstackenv10C5A902Ref": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackGraphQLAPI20497F53ApiId": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackS3DeploymentBucket7592718ARef": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScoreauth0FunctionQuerygetScoreauth0FunctionAppSyncFunction0E63EE63FunctionId": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreMutationcreateScoreinit0FunctionMutationcreateScoreinit0FunctionAppSyncFunction8E6D7B52FunctionId": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreMutationcreateScoreauth0FunctionMutationcreateScoreauth0FunctionAppSyncFunction439E578CFunctionId": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreMutationupdateScoreinit0FunctionMutationupdateScoreinit0FunctionAppSyncFunctionAA34B888FunctionId": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreSubscriptiononCreateScoreauth0FunctionSubscriptiononCreateScoreauth0FunctionAppSyncFunction0F1F091EFunctionId": {
+      "Type": "String"
+    },
+    "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreSubscriptionOnCreateScoreDataResolverFnSubscriptionOnCreateScoreDataResolverFnAppSyncFunction9C649346FunctionId": {
+      "Type": "String"
+    }
+  },
+  "Conditions": {
+    "HasEnvironmentParameter": {
+      "Fn::Not": [
+        {
+          "Fn::Equals": [
+            {
+              "Ref": "referencetotransformerrootstackenv10C5A902Ref"
+            },
+            "NONE"
+          ]
+        }
+      ]
+    },
+    "ShouldUseServerSideEncryption": {
+      "Fn::Equals": [
+        {
+          "Ref": "DynamoDBEnableServerSideEncryption"
+        },
+        "true"
+      ]
+    },
+    "ShouldUsePayPerRequestBilling": {
+      "Fn::Equals": [
+        {
+          "Ref": "DynamoDBBillingMode"
+        },
+        "PAY_PER_REQUEST"
+      ]
+    },
+    "ShouldUsePointInTimeRecovery": {
+      "Fn::Equals": [
+        {
+          "Ref": "DynamoDBEnablePointInTimeRecovery"
+        },
+        "true"
+      ]
+    }
+  },
+  "Resources": {
+    "GameResultTable": {
+      "Type": "AWS::DynamoDB::Table",
+      "Properties": {
+        "AttributeDefinitions": [
+          {
+            "AttributeName": "id",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "userId",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "completedAt",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "modeDate",
+            "AttributeType": "S"
+          },
+          {
+            "AttributeName": "score",
+            "AttributeType": "N"
+          }
+        ],
+        "BillingMode": {
+          "Fn::If": [
+            "ShouldUsePayPerRequestBilling",
+            "PAY_PER_REQUEST",
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "GlobalSecondaryIndexes": [
+          {
+            "IndexName": "byUser",
+            "KeySchema": [
+              {
+                "AttributeName": "userId",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "completedAt",
+                "KeyType": "RANGE"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            },
+            "ProvisionedThroughput": {
+              "Fn::If": [
+                "ShouldUsePayPerRequestBilling",
+                {
+                  "Ref": "AWS::NoValue"
+                },
+                {
+                  "ReadCapacityUnits": {
+                    "Ref": "DynamoDBModelTableReadIOPS"
+                  },
+                  "WriteCapacityUnits": {
+                    "Ref": "DynamoDBModelTableWriteIOPS"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "IndexName": "byModeDate",
+            "KeySchema": [
+              {
+                "AttributeName": "modeDate",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "score",
+                "KeyType": "RANGE"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            },
+            "ProvisionedThroughput": {
+              "Fn::If": [
+                "ShouldUsePayPerRequestBilling",
+                {
+                  "Ref": "AWS::NoValue"
+                },
+                {
+                  "ReadCapacityUnits": {
+                    "Ref": "DynamoDBModelTableReadIOPS"
+                  },
+                  "WriteCapacityUnits": {
+                    "Ref": "DynamoDBModelTableWriteIOPS"
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "KeySchema": [
+          {
+            "AttributeName": "id",
+            "KeyType": "HASH"
+          }
+        ],
+        "PointInTimeRecoverySpecification": {
+          "Fn::If": [
+            "ShouldUsePointInTimeRecovery",
+            {
+              "PointInTimeRecoveryEnabled": true
+            },
+            {
+              "Ref": "AWS::NoValue"
+            }
+          ]
+        },
+        "ProvisionedThroughput": {
+          "Fn::If": [
+            "ShouldUsePayPerRequestBilling",
+            {
+              "Ref": "AWS::NoValue"
+            },
+            {
+              "ReadCapacityUnits": {
+                "Ref": "DynamoDBModelTableReadIOPS"
+              },
+              "WriteCapacityUnits": {
+                "Ref": "DynamoDBModelTableWriteIOPS"
+              }
+            }
+          ]
+        },
+        "SSESpecification": {
+          "SSEEnabled": {
+            "Fn::If": [
+              "ShouldUseServerSideEncryption",
+              true,
+              false
+            ]
+          }
+        },
+        "StreamSpecification": {
+          "StreamViewType": "NEW_AND_OLD_IMAGES"
+        },
+        "TableName": {
+          "Fn::Join": [
+            "",
+            [
+              "GameResult-",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "-",
+              {
+                "Ref": "referencetotransformerrootstackenv10C5A902Ref"
+              }
+            ]
+          ]
+        }
+      },
+      "UpdateReplacePolicy": "Delete",
+      "DeletionPolicy": "Delete"
+    },
+    "GameResultIAMRole9B53F88F": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Statement": [
+            {
+              "Action": "sts:AssumeRole",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "appsync.amazonaws.com"
+              }
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "Policies": [
+          {
+            "PolicyDocument": {
+              "Statement": [
+                {
+                  "Action": [
+                    "dynamodb:BatchGetItem",
+                    "dynamodb:BatchWriteItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:GetItem",
+                    "dynamodb:Scan",
+                    "dynamodb:Query",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:ConditionCheckItem",
+                    "dynamodb:DescribeTable",
+                    "dynamodb:GetRecords",
+                    "dynamodb:GetShardIterator"
+                  ],
+                  "Effect": "Allow",
+                  "Resource": [
+                    {
+                      "Fn::Sub": [
+                        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${tablename}",
+                        {
+                          "tablename": {
+                            "Fn::Join": [
+                              "",
+                              [
+                                "GameResult-",
+                                {
+                                  "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+                                },
+                                "-",
+                                {
+                                  "Ref": "referencetotransformerrootstackenv10C5A902Ref"
+                                }
+                              ]
+                            ]
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "Fn::Sub": [
+                        "arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${tablename}/*",
+                        {
+                          "tablename": {
+                            "Fn::Join": [
+                              "",
+                              [
+                                "GameResult-",
+                                {
+                                  "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+                                },
+                                "-",
+                                {
+                                  "Ref": "referencetotransformerrootstackenv10C5A902Ref"
+                                }
+                              ]
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "Version": "2012-10-17"
+            },
+            "PolicyName": "DynamoDBAccess"
+          }
+        ],
+        "RoleName": {
+          "Fn::Join": [
+            "",
+            [
+              "GameResultIAMRolea2f382-",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "-",
+              {
+                "Ref": "referencetotransformerrootstackenv10C5A902Ref"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "GameResultIAMRoleDefaultPolicy92517276": {
+      "Type": "AWS::IAM::Policy",
+      "Properties": {
+        "PolicyDocument": {
+          "Statement": [
+            {
+              "Action": [
+                "dynamodb:BatchGetItem",
+                "dynamodb:GetRecords",
+                "dynamodb:GetShardIterator",
+                "dynamodb:Query",
+                "dynamodb:GetItem",
+                "dynamodb:Scan",
+                "dynamodb:ConditionCheckItem",
+                "dynamodb:BatchWriteItem",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem",
+                "dynamodb:DeleteItem",
+                "dynamodb:DescribeTable"
+              ],
+              "Effect": "Allow",
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "GameResultTable",
+                    "Arn"
+                  ]
+                },
+                {
+                  "Fn::Join": [
+                    "",
+                    [
+                      {
+                        "Fn::GetAtt": [
+                          "GameResultTable",
+                          "Arn"
+                        ]
+                      },
+                      "/index/*"
+                    ]
+                  ]
+                }
+              ]
+            }
+          ],
+          "Version": "2012-10-17"
+        },
+        "PolicyName": "GameResultIAMRoleDefaultPolicy92517276",
+        "Roles": [
+          {
+            "Ref": "GameResultIAMRole9B53F88F"
+          }
+        ]
+      }
+    },
+    "GameResultDataSource": {
+      "Type": "AWS::AppSync::DataSource",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DynamoDBConfig": {
+          "AwsRegion": {
+            "Ref": "AWS::Region"
+          },
+          "TableName": {
+            "Ref": "GameResultTable"
+          }
+        },
+        "Name": "GameResultTable",
+        "ServiceRoleArn": {
+          "Fn::GetAtt": [
+            "GameResultIAMRole9B53F88F",
+            "Arn"
+          ]
+        },
+        "Type": "AMAZON_DYNAMODB"
+      },
+      "DependsOn": [
+        "GameResultIAMRole9B53F88F"
+      ]
+    },
+    "QueryGetGameResultDataResolverFnQueryGetGameResultDataResolverFnAppSyncFunction172F4529": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "GameResultDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "QueryGetGameResultDataResolverFn",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.getGameResult.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.getGameResult.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "GameResultDataSource"
+      ]
+    },
+    "GetGameResultResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "getGameResult",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScoreauth0FunctionQuerygetScoreauth0FunctionAppSyncFunction0E63EE63FunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId"
+            },
+            {
+              "Fn::GetAtt": [
+                "QueryGetGameResultDataResolverFnQueryGetGameResultDataResolverFnAppSyncFunction172F4529",
+                "FunctionId"
+              ]
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "$util.qr($ctx.stash.put(\"typeName\", \"Query\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"getGameResult\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"AMAZON_DYNAMODB\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n$util.qr($ctx.stash.put(\"tableName\", \"",
+              {
+                "Ref": "GameResultTable"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+            ]
+          ]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.prev.result)",
+        "TypeName": "Query"
+      }
+    },
+    "QueryListGameResultsDataResolverFnQueryListGameResultsDataResolverFnAppSyncFunction2A551B4F": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "GameResultDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "QueryListGameResultsDataResolverFn",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.listGameResults.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.listGameResults.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "GameResultDataSource"
+      ]
+    },
+    "ListGameResultResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "listGameResults",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScoreauth0FunctionQuerygetScoreauth0FunctionAppSyncFunction0E63EE63FunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId"
+            },
+            {
+              "Fn::GetAtt": [
+                "QueryListGameResultsDataResolverFnQueryListGameResultsDataResolverFnAppSyncFunction2A551B4F",
+                "FunctionId"
+              ]
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "$util.qr($ctx.stash.put(\"typeName\", \"Query\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"listGameResults\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"AMAZON_DYNAMODB\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n$util.qr($ctx.stash.put(\"tableName\", \"",
+              {
+                "Ref": "GameResultTable"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+            ]
+          ]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.prev.result)",
+        "TypeName": "Query"
+      }
+    },
+    "MutationCreateGameResultDataResolverFnMutationCreateGameResultDataResolverFnAppSyncFunction51788FDD": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "GameResultDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "MutationCreateGameResultDataResolverFn",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Mutation.createGameResult.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Mutation.createGameResult.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "GameResultDataSource"
+      ]
+    },
+    "CreateGameResultResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "createGameResult",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreMutationcreateScoreinit0FunctionMutationcreateScoreinit0FunctionAppSyncFunction8E6D7B52FunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreMutationcreateScoreauth0FunctionMutationcreateScoreauth0FunctionAppSyncFunction439E578CFunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId"
+            },
+            {
+              "Fn::GetAtt": [
+                "MutationCreateGameResultDataResolverFnMutationCreateGameResultDataResolverFnAppSyncFunction51788FDD",
+                "FunctionId"
+              ]
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "$util.qr($ctx.stash.put(\"typeName\", \"Mutation\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"createGameResult\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"AMAZON_DYNAMODB\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n$util.qr($ctx.stash.put(\"tableName\", \"",
+              {
+                "Ref": "GameResultTable"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+            ]
+          ]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.prev.result)",
+        "TypeName": "Mutation"
+      }
+    },
+    "MutationupdateGameResultauth0FunctionMutationupdateGameResultauth0FunctionAppSyncFunction040ADE8D": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "GameResultDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "MutationupdateGameResultauth0Function",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Mutation.updateGameResult.auth.1.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Mutation.updateGameResult.auth.1.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "GameResultDataSource"
+      ]
+    },
+    "MutationUpdateGameResultDataResolverFnMutationUpdateGameResultDataResolverFnAppSyncFunction3FECD01F": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "GameResultDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "MutationUpdateGameResultDataResolverFn",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Mutation.updateGameResult.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Mutation.updateGameResult.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "GameResultDataSource"
+      ]
+    },
+    "UpdateGameResultResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "updateGameResult",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreMutationupdateScoreinit0FunctionMutationupdateScoreinit0FunctionAppSyncFunctionAA34B888FunctionId"
+            },
+            {
+              "Fn::GetAtt": [
+                "MutationupdateGameResultauth0FunctionMutationupdateGameResultauth0FunctionAppSyncFunction040ADE8D",
+                "FunctionId"
+              ]
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId"
+            },
+            {
+              "Fn::GetAtt": [
+                "MutationUpdateGameResultDataResolverFnMutationUpdateGameResultDataResolverFnAppSyncFunction3FECD01F",
+                "FunctionId"
+              ]
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "$util.qr($ctx.stash.put(\"typeName\", \"Mutation\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"updateGameResult\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"AMAZON_DYNAMODB\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n$util.qr($ctx.stash.put(\"tableName\", \"",
+              {
+                "Ref": "GameResultTable"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+            ]
+          ]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.prev.result)",
+        "TypeName": "Mutation"
+      }
+    },
+    "MutationdeleteGameResultauth0FunctionMutationdeleteGameResultauth0FunctionAppSyncFunction80BDDF8B": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "GameResultDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "MutationdeleteGameResultauth0Function",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Mutation.deleteGameResult.auth.1.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Mutation.deleteGameResult.auth.1.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "GameResultDataSource"
+      ]
+    },
+    "MutationDeleteGameResultDataResolverFnMutationDeleteGameResultDataResolverFnAppSyncFunctionA82DDF36": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "GameResultDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "MutationDeleteGameResultDataResolverFn",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Mutation.deleteGameResult.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Mutation.deleteGameResult.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "GameResultDataSource"
+      ]
+    },
+    "DeleteGameResultResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "deleteGameResult",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Fn::GetAtt": [
+                "MutationdeleteGameResultauth0FunctionMutationdeleteGameResultauth0FunctionAppSyncFunction80BDDF8B",
+                "FunctionId"
+              ]
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId"
+            },
+            {
+              "Fn::GetAtt": [
+                "MutationDeleteGameResultDataResolverFnMutationDeleteGameResultDataResolverFnAppSyncFunctionA82DDF36",
+                "FunctionId"
+              ]
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "$util.qr($ctx.stash.put(\"typeName\", \"Mutation\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"deleteGameResult\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"AMAZON_DYNAMODB\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n$util.qr($ctx.stash.put(\"tableName\", \"",
+              {
+                "Ref": "GameResultTable"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+            ]
+          ]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.prev.result)",
+        "TypeName": "Mutation"
+      }
+    },
+    "SubscriptiononCreateGameResultResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "onCreateGameResult",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreSubscriptiononCreateScoreauth0FunctionSubscriptiononCreateScoreauth0FunctionAppSyncFunction0F1F091EFunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreSubscriptionOnCreateScoreDataResolverFnSubscriptionOnCreateScoreDataResolverFnAppSyncFunction9C649346FunctionId"
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "$util.qr($ctx.stash.put(\"typeName\", \"Subscription\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"onCreateGameResult\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"NONE\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+            ]
+          ]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.prev.result)",
+        "TypeName": "Subscription"
+      }
+    },
+    "SubscriptiononUpdateGameResultResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "onUpdateGameResult",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreSubscriptiononCreateScoreauth0FunctionSubscriptiononCreateScoreauth0FunctionAppSyncFunction0F1F091EFunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreSubscriptionOnCreateScoreDataResolverFnSubscriptionOnCreateScoreDataResolverFnAppSyncFunction9C649346FunctionId"
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "$util.qr($ctx.stash.put(\"typeName\", \"Subscription\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"onUpdateGameResult\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"NONE\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+            ]
+          ]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.prev.result)",
+        "TypeName": "Subscription"
+      }
+    },
+    "SubscriptiononDeleteGameResultResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "onDeleteGameResult",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreSubscriptiononCreateScoreauth0FunctionSubscriptiononCreateScoreauth0FunctionAppSyncFunction0F1F091EFunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreSubscriptionOnCreateScoreDataResolverFnSubscriptionOnCreateScoreDataResolverFnAppSyncFunction9C649346FunctionId"
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "$util.qr($ctx.stash.put(\"typeName\", \"Subscription\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"onDeleteGameResult\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"NONE\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+            ]
+          ]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.prev.result)",
+        "TypeName": "Subscription"
+      }
+    },
+    "QueryGameResultsByUserDataResolverFnQueryGameResultsByUserDataResolverFnAppSyncFunctionC95B1779": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "GameResultDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "QueryGameResultsByUserDataResolverFn",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.gameResultsByUser.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.gameResultsByUser.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "GameResultDataSource"
+      ]
+    },
+    "QuerygameResultsByUserResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "gameResultsByUser",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScoreauth0FunctionQuerygetScoreauth0FunctionAppSyncFunction0E63EE63FunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId"
+            },
+            {
+              "Fn::GetAtt": [
+                "QueryGameResultsByUserDataResolverFnQueryGameResultsByUserDataResolverFnAppSyncFunctionC95B1779",
+                "FunctionId"
+              ]
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "$util.qr($ctx.stash.put(\"typeName\", \"Query\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"gameResultsByUser\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"AMAZON_DYNAMODB\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n$util.qr($ctx.stash.put(\"tableName\", \"",
+              {
+                "Ref": "GameResultTable"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+            ]
+          ]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.prev.result)",
+        "TypeName": "Query"
+      }
+    },
+    "QueryGameResultsByModeDateDataResolverFnQueryGameResultsByModeDateDataResolverFnAppSyncFunctionEBB383DD": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "GameResultDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "QueryGameResultsByModeDateDataResolverFn",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.gameResultsByModeDate.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.gameResultsByModeDate.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "GameResultDataSource"
+      ]
+    },
+    "QuerygameResultsByModeDateResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "gameResultsByModeDate",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScoreauth0FunctionQuerygetScoreauth0FunctionAppSyncFunction0E63EE63FunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId"
+            },
+            {
+              "Fn::GetAtt": [
+                "QueryGameResultsByModeDateDataResolverFnQueryGameResultsByModeDateDataResolverFnAppSyncFunctionEBB383DD",
+                "FunctionId"
+              ]
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "$util.qr($ctx.stash.put(\"typeName\", \"Query\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"gameResultsByModeDate\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"AMAZON_DYNAMODB\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n$util.qr($ctx.stash.put(\"tableName\", \"",
+              {
+                "Ref": "GameResultTable"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+            ]
+          ]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.prev.result)",
+        "TypeName": "Query"
+      }
+    }
+  },
+  "Outputs": {
+    "GetAttGameResultTableStreamArn": {
+      "Description": "Your DynamoDB table StreamArn.",
+      "Value": {
+        "Fn::GetAtt": [
+          "GameResultTable",
+          "StreamArn"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            ":",
+            [
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "GetAtt:GameResultTable:StreamArn"
+            ]
+          ]
+        }
+      }
+    },
+    "GetAttGameResultTableName": {
+      "Description": "Your DynamoDB table name.",
+      "Value": {
+        "Ref": "GameResultTable"
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            ":",
+            [
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "GetAtt:GameResultTable:Name"
+            ]
+          ]
+        }
+      }
+    },
+    "GetAttGameResultDataSourceName": {
+      "Description": "Your model DataSource name.",
+      "Value": {
+        "Fn::GetAtt": [
+          "GameResultDataSource",
+          "Name"
+        ]
+      },
+      "Export": {
+        "Name": {
+          "Fn::Join": [
+            ":",
+            [
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "GetAtt:GameResultDataSource:Name"
+            ]
+          ]
+        }
+      }
+    }
+  }
+}

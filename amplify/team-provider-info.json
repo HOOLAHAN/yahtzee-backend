@@ -1,0 +1,48 @@
+{
+  "dev": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-yahtzee-dev-132249-authRole",
+      "UnauthRoleArn": "arn:aws:iam::974928048532:role/amplify-yahtzee-dev-132249-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::974928048532:role/amplify-yahtzee-dev-132249-authRole",
+      "Region": "eu-west-2",
+      "DeploymentBucketName": "amplify-yahtzee-dev-132249-deployment",
+      "UnauthRoleName": "amplify-yahtzee-dev-132249-unauthRole",
+      "StackName": "amplify-yahtzee-dev-132249",
+      "StackId": "arn:aws:cloudformation:eu-west-2:974928048532:stack/amplify-yahtzee-dev-132249/23d2a400-d4aa-11ee-b455-0a79222af827",
+      "AmplifyAppId": "d325as0o95xk3a"
+    },
+    "categories": {
+      "auth": {
+        "yahtzeeb456dc42": {}
+      },
+      "api": {
+        "yahtzee": {
+          "AuthCognitoUserPoolId": "eu-west-2_fktkjskrl"
+        }
+      }
+    }
+  },
+  "sandbox": {
+    "awscloudformation": {
+      "AuthRoleName": "amplify-yahtzee-sandbox-87226-authRole",
+      "UnauthRoleArn": "arn:aws:iam::974928048532:role/amplify-yahtzee-sandbox-87226-unauthRole",
+      "AuthRoleArn": "arn:aws:iam::974928048532:role/amplify-yahtzee-sandbox-87226-authRole",
+      "Region": "eu-west-2",
+      "DeploymentBucketName": "amplify-yahtzee-sandbox-87226-deployment",
+      "UnauthRoleName": "amplify-yahtzee-sandbox-87226-unauthRole",
+      "StackName": "amplify-yahtzee-sandbox-87226",
+      "StackId": "arn:aws:cloudformation:eu-west-2:974928048532:stack/amplify-yahtzee-sandbox-87226/ca63cfb0-9505-11f1-b870-067b9c55f22d",
+      "AmplifyAppId": "d325as0o95xk3a"
+    },
+    "categories": {
+      "auth": {
+        "yahtzeeb456dc42": {}
+      },
+      "api": {
+        "yahtzee": {
+          "AuthCognitoUserPoolId": "eu-west-2_e3QMax7lJ"
+        }
+      }
+    }
+  }
+}

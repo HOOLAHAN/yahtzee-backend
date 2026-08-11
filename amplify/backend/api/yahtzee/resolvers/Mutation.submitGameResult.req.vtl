@@ -1,0 +1,48 @@
+#set($timestamp = $util.time.nowISO8601())
+#set($sub = $ctx.identity.sub)
+#set($username = $ctx.identity.claims.get("preferred_username"))
+#if($util.isNullOrBlank($username))
+  #set($username = $ctx.identity.claims.get("email"))
+#end
+#if($util.isNullOrBlank($username))
+  #set($username = $ctx.identity.username)
+#end
+#if($util.isNullOrBlank($username))
+  #set($username = "Player")
+#end
+#set($mode = $ctx.args.input.mode)
+#if($mode == "DAILY")
+  #if($util.isNullOrBlank($ctx.args.input.challengeDate))
+    $util.error("A challenge date is required for Daily results.", "BadRequest")
+  #end
+  #set($id = "daily:${ctx.args.input.challengeDate}:${sub}")
+  #set($modeDate = "DAILY#${ctx.args.input.challengeDate}")
+#else
+  #set($id = $ctx.args.input.id)
+  #set($modeDate = "SOLO#ALL")
+#end
+{
+  "version": "2018-05-29",
+  "operation": "PutItem",
+  "key": { "id": $util.dynamodb.toDynamoDBJson($id) },
+  "attributeValues": {
+    "userId": $util.dynamodb.toDynamoDBJson($sub),
+    "username": $util.dynamodb.toDynamoDBJson($username),
+    "mode": $util.dynamodb.toDynamoDBJson($mode),
+    "modeDate": $util.dynamodb.toDynamoDBJson($modeDate),
+    "challengeDate": $util.dynamodb.toDynamoDBJson($ctx.args.input.challengeDate),
+    "score": $util.dynamodb.toDynamoDBJson($ctx.args.input.score),
+    "completedAt": $util.dynamodb.toDynamoDBJson($timestamp),
+    "yahtzeeCount": $util.dynamodb.toDynamoDBJson($ctx.args.input.yahtzeeCount),
+    "earnedUpperBonus": $util.dynamodb.toDynamoDBJson($ctx.args.input.earnedUpperBonus),
+    "completedSmallStraight": $util.dynamodb.toDynamoDBJson($ctx.args.input.completedSmallStraight),
+    "completedLargeStraight": $util.dynamodb.toDynamoDBJson($ctx.args.input.completedLargeStraight),
+    "noZeroScores": $util.dynamodb.toDynamoDBJson($ctx.args.input.noZeroScores),
+    "yahtzeeOnFinalRoll": $util.dynamodb.toDynamoDBJson($ctx.args.input.yahtzeeOnFinalRoll),
+    "scorecard": $util.dynamodb.toDynamoDBJson($ctx.args.input.scorecard),
+    "createdAt": $util.dynamodb.toDynamoDBJson($timestamp),
+    "updatedAt": $util.dynamodb.toDynamoDBJson($timestamp),
+    "__typename": $util.dynamodb.toDynamoDBJson("GameResult")
+  },
+  "condition": { "expression": "attribute_not_exists(id)" }
+}

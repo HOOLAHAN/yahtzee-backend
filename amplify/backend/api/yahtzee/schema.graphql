@@ -1,0 +1,89 @@
+type Score
+  @model
+  @auth(rules: [
+    { allow: public, provider: apiKey, operations: [read] }
+    { allow: private, provider: userPools, operations: [read] }
+  ]) {
+  id: ID!
+  userId: String!
+  username: String!
+  score: Int!
+  timestamp: AWSDateTime!
+}
+
+enum GameMode {
+  SOLO
+  DAILY
+}
+
+# Immutable V2 completion records. The existing Score model remains the
+# all-time leaderboard so production scores do not need a migration.
+type GameResult
+  @model
+  @auth(rules: [
+    { allow: public, provider: apiKey, operations: [read] }
+    { allow: private, provider: userPools, operations: [read] }
+  ]) {
+  id: ID!
+  userId: String! @index(name: "byUser", sortKeyFields: ["completedAt"], queryField: "gameResultsByUser")
+  username: String!
+  mode: GameMode!
+  modeDate: String! @index(name: "byModeDate", sortKeyFields: ["score"], queryField: "gameResultsByModeDate")
+  challengeDate: AWSDate
+  score: Int!
+  completedAt: AWSDateTime!
+  yahtzeeCount: Int!
+  earnedUpperBonus: Boolean!
+  completedSmallStraight: Boolean!
+  completedLargeStraight: Boolean!
+  noZeroScores: Boolean!
+  yahtzeeOnFinalRoll: Boolean!
+  scorecard: AWSJSON
+}
+
+input SubmitGameResultInput {
+  id: ID!
+  mode: GameMode!
+  challengeDate: AWSDate
+  score: Int!
+  yahtzeeCount: Int!
+  earnedUpperBonus: Boolean!
+  completedSmallStraight: Boolean!
+  completedLargeStraight: Boolean!
+  noZeroScores: Boolean!
+  yahtzeeOnFinalRoll: Boolean!
+  scorecard: AWSJSON
+}
+
+type DailyRoundStanding @aws_cognito_user_pools {
+  challengeDate: AWSDate!
+  round: Int!
+  score: Int!
+  rank: Int!
+  playerCount: Int!
+  percentile: Int!
+}
+
+type Mutation {
+  submitScore(id: ID, score: Int!): Score @aws_cognito_user_pools
+  submitGameResult(input: SubmitGameResultInput!): GameResult @aws_cognito_user_pools
+  submitDailyRoundProgress(challengeDate: AWSDate!, round: Int!, score: Int!): DailyRoundStanding! @aws_cognito_user_pools
+  updateMyProfile(username: String!, firstName: String!, lastName: String!): UserProfile @aws_cognito_user_pools
+  updateMyPreferences(scoreSuggestionsEnabled: Boolean!, dailyReminderEnabled: Boolean!, dailyReminderHour: Int!): UserProfile @aws_cognito_user_pools
+  deleteMyProfile: Boolean! @aws_cognito_user_pools
+}
+
+type Query {
+  myProfile: UserProfile @aws_cognito_user_pools
+  usernameAvailable(username: String!): Boolean! @aws_api_key
+}
+
+type UserProfile @aws_cognito_user_pools {
+  userId: ID!
+  username: String!
+  firstName: String!
+  lastName: String!
+  scoreSuggestionsEnabled: Boolean!
+  dailyReminderEnabled: Boolean!
+  dailyReminderHour: Int!
+}
