@@ -52,9 +52,34 @@ npm run deploy:profile:sandbox
 
 ## Production
 
-Production remains live and deployable from the website repository during this
-first migration stage. Do not deploy `dev` from this repository until the
-sandbox has been exercised successfully and the production cutover is approved.
+The historical Amplify environment named `dev` is the live production backend.
+Production deployments are guarded and must be explicitly confirmed after the
+CloudFormation change has been reviewed and production tables have been backed
+up:
+
+```bash
+CONFIRM_PRODUCTION=deploy-existing-yahtzee-production npm run deploy:production
+```
+
+The command targets the existing production stack and injects its existing
+Cognito pool ID. Never use a raw `amplify push` for production.
+
+Profile Lambda production changes use the same explicit guard:
+
+```bash
+CONFIRM_PRODUCTION=deploy-existing-yahtzee-production npm run deploy:profile:production
+```
+
+### Production ownership status
+
+Production ownership moved to this repository on 11 August 2026. The existing
+`dev` Amplify environment and all existing resources were retained; this was an
+ownership cutover, not a new production environment or data migration.
+
+Before the cutover, on-demand backups were created for the production Score,
+GameResult, UserProfile and legacy Yahtzee DynamoDB tables. V1 leaderboard,
+V2 Solo/Daily results and the profile-service public query were verified both
+before and after deployment.
 
 ## Frontend configuration
 
