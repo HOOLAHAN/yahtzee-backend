@@ -79,6 +79,7 @@ type Query {
   getGameResult(id: ID!): GameResult @aws_api_key @aws_cognito_user_pools
   listGameResults(filter: ModelGameResultFilterInput, limit: Int, nextToken: String): ModelGameResultConnection @aws_api_key @aws_cognito_user_pools
   gameResultsByUser(userId: String!, completedAt: ModelStringKeyConditionInput, sortDirection: ModelSortDirection, filter: ModelGameResultFilterInput, limit: Int, nextToken: String): ModelGameResultConnection @aws_api_key @aws_cognito_user_pools
+  gameResultsByMode(mode: GameMode!, score: ModelIntKeyConditionInput, sortDirection: ModelSortDirection, filter: ModelGameResultFilterInput, limit: Int, nextToken: String): ModelGameResultConnection @aws_api_key @aws_cognito_user_pools
   gameResultsByModeDate(modeDate: String!, score: ModelIntKeyConditionInput, sortDirection: ModelSortDirection, filter: ModelGameResultFilterInput, limit: Int, nextToken: String): ModelGameResultConnection @aws_api_key @aws_cognito_user_pools
 }
 

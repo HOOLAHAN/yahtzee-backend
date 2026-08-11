@@ -1,4 +1,4 @@
-import { CognitoIdentityProviderClient, AdminUpdateUserAttributesCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { CognitoIdentityProviderClient, AdminDeleteUserCommand, AdminUpdateUserAttributesCommand, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { BatchWriteItemCommand, DynamoDBClient, GetItemCommand, PutItemCommand, ScanCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
 
 const db = new DynamoDBClient({});
@@ -13,6 +13,33 @@ const normalise = (value) => clean(value, 20).toLowerCase();
 const profileKey = (sub) => `USER#${sub}`;
 const usernameKey = (name) => `USERNAME#${normalise(name)}`;
 const dailyRoundPrefix = (date, round) => `DAILY#${date}#ROUND#${String(round).padStart(2, '0')}#`;
+const unconfirmedRetentionDays = Math.max(7, Number(process.env.UNCONFIRMED_RETENTION_DAYS ?? 14));
+
+async function cleanupUnconfirmedUsers() {
+  if (!pool) throw new Error('USER_POOL_ID is required for unconfirmed-user cleanup.');
+  const cutoff = Date.now() - unconfirmedRetentionDays * 24 * 60 * 60 * 1000;
+  let paginationToken;
+  let scanned = 0;
+  let deleted = 0;
+  do {
+    const result = await cognito.send(new ListUsersCommand({
+      UserPoolId: pool,
+      Filter: 'cognito:user_status = "UNCONFIRMED"',
+      Limit: 60,
+      PaginationToken: paginationToken,
+    }));
+    for (const user of result.Users ?? []) {
+      scanned += 1;
+      if (user.Username && user.UserCreateDate && user.UserCreateDate.getTime() < cutoff) {
+        await cognito.send(new AdminDeleteUserCommand({ UserPoolId: pool, Username: user.Username }));
+        deleted += 1;
+      }
+    }
+    paginationToken = result.PaginationToken;
+  } while (paginationToken);
+  console.info('Unconfirmed-user cleanup complete', { scanned, deleted, retentionDays: unconfirmedRetentionDays });
+  return { scanned, deleted, retentionDays: unconfirmedRetentionDays };
+}
 
 async function getProfile(sub) {
   const result = await db.send(new GetItemCommand({
@@ -179,6 +206,7 @@ async function submitDailyRoundProgress(sub, challengeDate, roundValue, scoreVal
 }
 
 export const handler = async (event) => {
+  if (event?.source === 'yahtzee.account-cleanup') return await cleanupUnconfirmedUsers();
   const field = event.field;
   if (field === 'usernameAvailable') {
     const username = clean(event.args.username, 20);

@@ -127,12 +127,16 @@
             "AttributeType": "S"
           },
           {
-            "AttributeName": "modeDate",
+            "AttributeName": "mode",
             "AttributeType": "S"
           },
           {
             "AttributeName": "score",
             "AttributeType": "N"
+          },
+          {
+            "AttributeName": "modeDate",
+            "AttributeType": "S"
           }
         ],
         "BillingMode": {
@@ -154,6 +158,38 @@
               },
               {
                 "AttributeName": "completedAt",
+                "KeyType": "RANGE"
+              }
+            ],
+            "Projection": {
+              "ProjectionType": "ALL"
+            },
+            "ProvisionedThroughput": {
+              "Fn::If": [
+                "ShouldUsePayPerRequestBilling",
+                {
+                  "Ref": "AWS::NoValue"
+                },
+                {
+                  "ReadCapacityUnits": {
+                    "Ref": "DynamoDBModelTableReadIOPS"
+                  },
+                  "WriteCapacityUnits": {
+                    "Ref": "DynamoDBModelTableWriteIOPS"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "IndexName": "byMode",
+            "KeySchema": [
+              {
+                "AttributeName": "mode",
+                "KeyType": "HASH"
+              },
+              {
+                "AttributeName": "score",
                 "KeyType": "RANGE"
               }
             ],
@@ -1241,6 +1277,101 @@
             "",
             [
               "$util.qr($ctx.stash.put(\"typeName\", \"Query\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"gameResultsByUser\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"AMAZON_DYNAMODB\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
+              {
+                "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n$util.qr($ctx.stash.put(\"tableName\", \"",
+              {
+                "Ref": "GameResultTable"
+              },
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+            ]
+          ]
+        },
+        "ResponseMappingTemplate": "$util.toJson($ctx.prev.result)",
+        "TypeName": "Query"
+      }
+    },
+    "QueryGameResultsByModeDataResolverFnQueryGameResultsByModeDataResolverFnAppSyncFunction097B1438": {
+      "Type": "AWS::AppSync::FunctionConfiguration",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "DataSourceName": {
+          "Fn::GetAtt": [
+            "GameResultDataSource",
+            "Name"
+          ]
+        },
+        "FunctionVersion": "2018-05-29",
+        "Name": "QueryGameResultsByModeDataResolverFn",
+        "RequestMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.gameResultsByMode.req.vtl"
+            ]
+          ]
+        },
+        "ResponseMappingTemplateS3Location": {
+          "Fn::Join": [
+            "",
+            [
+              "s3://",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentBucket7592718ARef"
+              },
+              "/",
+              {
+                "Ref": "referencetotransformerrootstackS3DeploymentRootKeyA71EA735Ref"
+              },
+              "/resolvers/Query.gameResultsByMode.res.vtl"
+            ]
+          ]
+        }
+      },
+      "DependsOn": [
+        "GameResultDataSource"
+      ]
+    },
+    "QuerygameResultsByModeResolver": {
+      "Type": "AWS::AppSync::Resolver",
+      "Properties": {
+        "ApiId": {
+          "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
+        },
+        "FieldName": "gameResultsByMode",
+        "Kind": "PIPELINE",
+        "PipelineConfig": {
+          "Functions": [
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScoreauth0FunctionQuerygetScoreauth0FunctionAppSyncFunction0E63EE63FunctionId"
+            },
+            {
+              "Ref": "referencetotransformerrootstackScoreNestedStackScoreNestedStackResourceDC445AA2OutputstransformerrootstackScoreQuerygetScorepostAuth0FunctionQuerygetScorepostAuth0FunctionAppSyncFunctionADC1F823FunctionId"
+            },
+            {
+              "Fn::GetAtt": [
+                "QueryGameResultsByModeDataResolverFnQueryGameResultsByModeDataResolverFnAppSyncFunction097B1438",
+                "FunctionId"
+              ]
+            }
+          ]
+        },
+        "RequestMappingTemplate": {
+          "Fn::Join": [
+            "",
+            [
+              "$util.qr($ctx.stash.put(\"typeName\", \"Query\"))\n$util.qr($ctx.stash.put(\"fieldName\", \"gameResultsByMode\"))\n$util.qr($ctx.stash.put(\"conditions\", []))\n$util.qr($ctx.stash.put(\"metadata\", {}))\n$util.qr($ctx.stash.metadata.put(\"dataSourceType\", \"AMAZON_DYNAMODB\"))\n$util.qr($ctx.stash.metadata.put(\"apiId\", \"",
               {
                 "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
               },

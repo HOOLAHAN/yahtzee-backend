@@ -50,6 +50,13 @@ Deploy a profile Lambda code change after the Amplify deployment:
 npm run deploy:profile:sandbox
 ```
 
+After deploying the profile Lambda, configure its idempotent daily cleanup of
+Cognito accounts that remain unconfirmed for more than 14 days:
+
+```bash
+npm run configure:cleanup:sandbox
+```
+
 ## Production
 
 The historical Amplify environment named `dev` is the live production backend.
@@ -68,6 +75,12 @@ Profile Lambda production changes use the same explicit guard:
 
 ```bash
 CONFIRM_PRODUCTION=deploy-existing-yahtzee-production npm run deploy:profile:production
+```
+
+Then configure the guarded production schedule:
+
+```bash
+CONFIRM_PRODUCTION=deploy-existing-yahtzee-production npm run configure:cleanup:production
 ```
 
 ### Production ownership status

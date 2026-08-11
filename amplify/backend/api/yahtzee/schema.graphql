@@ -27,7 +27,7 @@ type GameResult
   id: ID!
   userId: String! @index(name: "byUser", sortKeyFields: ["completedAt"], queryField: "gameResultsByUser")
   username: String!
-  mode: GameMode!
+  mode: GameMode! @index(name: "byMode", sortKeyFields: ["score"], queryField: "gameResultsByMode")
   modeDate: String! @index(name: "byModeDate", sortKeyFields: ["score"], queryField: "gameResultsByModeDate")
   challengeDate: AWSDate
   score: Int!

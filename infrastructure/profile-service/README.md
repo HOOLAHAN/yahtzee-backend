@@ -27,3 +27,12 @@ authenticated Cognito `sub`, before the client deletes the Cognito user.
 The `YahtzeeUserProfiles` table has DynamoDB TTL enabled on `expiresAt`.
 Ordinary profile and username records do not contain that attribute and are
 not affected; Daily Challenge round-standing snapshots expire after 45 days.
+
+The same Lambda accepts the scheduled EventBridge source
+`yahtzee.account-cleanup`. It deletes only Cognito users that are still
+`UNCONFIRMED` after 14 days (configurable with
+`UNCONFIRMED_RETENTION_DAYS`). Verified users and DynamoDB profile/score data
+are never included. The Lambda role therefore also needs `ListUsers` and
+`AdminDeleteUser` on the environment's user pool. Configure one daily
+EventBridge invocation for each environment after applying the documented IAM
+policy.

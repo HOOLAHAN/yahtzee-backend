@@ -23,7 +23,11 @@
     },
     {
       "Effect": "Allow",
-      "Action": "cognito-idp:AdminUpdateUserAttributes",
+      "Action": [
+        "cognito-idp:AdminUpdateUserAttributes",
+        "cognito-idp:ListUsers",
+        "cognito-idp:AdminDeleteUser"
+      ],
       "Resource": "arn:aws:cognito-idp:eu-west-2:974928048532:userpool/eu-west-2_fktkjskrl"
     }
   ]
