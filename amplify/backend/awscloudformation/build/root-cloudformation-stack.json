@@ -202,22 +202,22 @@
     "apiyahtzee": {
       "Type": "AWS::CloudFormation::Stack",
       "Properties": {
-        "TemplateURL": "https://s3.amazonaws.com/amplify-yahtzee-sandbox-87226-deployment/amplify-cfn-templates/api/cloudformation-template.json",
+        "TemplateURL": "https://s3.amazonaws.com/amplify-yahtzee-dev-132249-deployment/amplify-cfn-templates/api/cloudformation-template.json",
         "Parameters": {
           "AppSyncApiName": "yahtzee",
-          "AuthCognitoUserPoolId": "eu-west-2_e3QMax7lJ",
+          "AuthCognitoUserPoolId": "eu-west-2_fktkjskrl",
           "DynamoDBBillingMode": "PAY_PER_REQUEST",
           "DynamoDBEnableServerSideEncryption": false,
-          "S3DeploymentBucket": "amplify-yahtzee-sandbox-87226-deployment",
-          "S3DeploymentRootKey": "amplify-appsync-files/fd644bd0380b229dd8c3b3e9a96677f1a916b9ba",
-          "env": "sandbox"
+          "S3DeploymentBucket": "amplify-yahtzee-dev-132249-deployment",
+          "S3DeploymentRootKey": "amplify-appsync-files/f405f50230f63b9ffc6aa191752a738e3a95b98c",
+          "env": "dev"
         }
       }
     },
     "authyahtzeeb456dc42": {
       "Type": "AWS::CloudFormation::Stack",
       "Properties": {
-        "TemplateURL": "https://s3.amazonaws.com/amplify-yahtzee-sandbox-87226-deployment/amplify-cfn-templates/auth/yahtzeeb456dc42-cloudformation-template.json",
+        "TemplateURL": "https://s3.amazonaws.com/amplify-yahtzee-dev-132249-deployment/amplify-cfn-templates/auth/yahtzeeb456dc42-cloudformation-template.json",
         "Parameters": {
           "identityPoolName": "yahtzeeb456dc42_identitypool_b456dc42",
           "allowUnauthenticatedIdentities": false,
@@ -264,7 +264,7 @@
           },
           "breakCircularDependency": true,
           "dependsOn": "",
-          "env": "sandbox"
+          "env": "dev"
         }
       }
     },

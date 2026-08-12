@@ -76,6 +76,7 @@ type Mutation {
 type Query {
   myProfile: UserProfile @aws_cognito_user_pools
   usernameAvailable(username: String!): Boolean! @aws_api_key
+  adminDashboard: AdminDashboard! @aws_cognito_user_pools
 }
 
 type UserProfile @aws_cognito_user_pools {
@@ -86,4 +87,22 @@ type UserProfile @aws_cognito_user_pools {
   scoreSuggestionsEnabled: Boolean!
   dailyReminderEnabled: Boolean!
   dailyReminderHour: Int!
+  role: String!
+}
+
+type AdminDashboard @aws_cognito_user_pools {
+  totalUsers: Int!
+  completedGames: Int!
+  soloGames: Int!
+  dailyGames: Int!
+  gamesToday: Int!
+  gamesLast7Days: Int!
+  gamesLast30Days: Int!
+  activeUsersLast7Days: Int!
+  activeUsersLast30Days: Int!
+  averageScore: Int!
+  yahtzeesRolled: Int!
+  upperBonusesEarned: Int!
+  generatedAt: AWSDateTime!
+  dailyActivity: AWSJSON!
 }

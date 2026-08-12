@@ -13,6 +13,58 @@ const normalise = (value) => clean(value, 20).toLowerCase();
 const profileKey = (sub) => `USER#${sub}`;
 const usernameKey = (name) => `USERNAME#${normalise(name)}`;
 const dailyRoundPrefix = (date, round) => `DAILY#${date}#ROUND#${String(round).padStart(2, '0')}#`;
+const isAdmin = (claims) => {
+  const groups = claims?.['cognito:groups'];
+  return Array.isArray(groups) ? groups.includes('Admin') : String(groups ?? '').split(',').some((group) => group.trim() === 'Admin');
+};
+
+async function scanAll(TableName, options = {}) {
+  const items = [];
+  let ExclusiveStartKey;
+  do {
+    const result = await db.send(new ScanCommand({ TableName, ...options, ExclusiveStartKey }));
+    items.push(...(result.Items ?? []));
+    ExclusiveStartKey = result.LastEvaluatedKey;
+  } while (ExclusiveStartKey);
+  return items;
+}
+
+async function adminDashboard(claims) {
+  if (!isAdmin(claims)) throw new Error('Admin access required');
+  const [profiles, results] = await Promise.all([
+    scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('USER#') }, ProjectionExpression: 'pk' }),
+    scanAll(gameResultTable, { ProjectionExpression: 'userId, #mode, score, completedAt, yahtzeeCount, earnedUpperBonus', ExpressionAttributeNames: { '#mode': 'mode' } }),
+  ]);
+  const now = new Date();
+  const startOfToday = new Date(now); startOfToday.setUTCHours(0, 0, 0, 0);
+  const daysAgo = (days) => new Date(now.getTime() - days * 86400000);
+  const last7 = daysAgo(7); const last30 = daysAgo(30);
+  const completedAt = (item) => new Date(item.completedAt?.S ?? 0);
+  const recent7 = results.filter((item) => completedAt(item) >= last7);
+  const recent30 = results.filter((item) => completedAt(item) >= last30);
+  const dailyActivity = Array.from({ length: 14 }, (_, index) => {
+    const date = new Date(startOfToday); date.setUTCDate(date.getUTCDate() - (13 - index));
+    const key = date.toISOString().slice(0, 10);
+    const games = results.filter((item) => item.completedAt?.S?.slice(0, 10) === key);
+    return { date: key, games: games.length, players: new Set(games.map((item) => item.userId?.S).filter(Boolean)).size };
+  });
+  return {
+    totalUsers: profiles.length,
+    completedGames: results.length,
+    soloGames: results.filter((item) => item.mode?.S === 'SOLO').length,
+    dailyGames: results.filter((item) => item.mode?.S === 'DAILY').length,
+    gamesToday: results.filter((item) => completedAt(item) >= startOfToday).length,
+    gamesLast7Days: recent7.length,
+    gamesLast30Days: recent30.length,
+    activeUsersLast7Days: new Set(recent7.map((item) => item.userId?.S).filter(Boolean)).size,
+    activeUsersLast30Days: new Set(recent30.map((item) => item.userId?.S).filter(Boolean)).size,
+    averageScore: results.length ? Math.round(results.reduce((sum, item) => sum + Number(item.score?.N ?? 0), 0) / results.length) : 0,
+    yahtzeesRolled: results.reduce((sum, item) => sum + Number(item.yahtzeeCount?.N ?? 0), 0),
+    upperBonusesEarned: results.filter((item) => item.earnedUpperBonus?.BOOL).length,
+    generatedAt: now.toISOString(),
+    dailyActivity: JSON.stringify(dailyActivity),
+  };
+}
 const unconfirmedRetentionDays = Math.max(7, Number(process.env.UNCONFIRMED_RETENTION_DAYS ?? 14));
 
 async function cleanupUnconfirmedUsers() {
@@ -222,11 +274,12 @@ export const handler = async (event) => {
   const claims = event.identity?.claims;
   const sub = claims?.sub;
   if (!sub) throw new Error('Authentication required');
+  if (field === 'adminDashboard') return await adminDashboard(claims);
   if (field === 'submitDailyRoundProgress') {
     return await submitDailyRoundProgress(sub, event.args.challengeDate, event.args.round, event.args.score);
   }
   if (field === 'myProfile') {
-    return await getProfile(sub) ?? {
+    const profile = await getProfile(sub) ?? {
       userId: sub,
       username: claims.preferred_username ?? '',
       firstName: claims.given_name ?? '',
@@ -235,6 +288,7 @@ export const handler = async (event) => {
       dailyReminderEnabled: false,
       dailyReminderHour: 19,
     };
+    return { ...profile, role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
   }
   if (field === 'deleteMyProfile') {
     const current = await getProfile(sub);
@@ -263,7 +317,7 @@ export const handler = async (event) => {
       pk: s(profileKey(sub)), userId: s(sub), username: s(profile.username), usernameNormalised: s(normalise(profile.username)), firstName: s(profile.firstName), lastName: s(profile.lastName),
       scoreSuggestionsEnabled: { BOOL: profile.scoreSuggestionsEnabled }, dailyReminderEnabled: { BOOL: profile.dailyReminderEnabled }, dailyReminderHour: { N: String(profile.dailyReminderHour) },
     } } }] }));
-    return profile;
+    return { ...profile, role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
   }
   if (field !== 'updateMyProfile') throw new Error('Unsupported operation');
 
@@ -313,5 +367,5 @@ export const handler = async (event) => {
   }));
 
   if (!current || current.username !== username) await Promise.all([renameScores(sub, username), renameGameResults(sub, username)]);
-  return { userId: sub, username, firstName, lastName, scoreSuggestionsEnabled: current?.scoreSuggestionsEnabled ?? true, dailyReminderEnabled: current?.dailyReminderEnabled ?? false, dailyReminderHour: current?.dailyReminderHour ?? 19 };
+  return { userId: sub, username, firstName, lastName, scoreSuggestionsEnabled: current?.scoreSuggestionsEnabled ?? true, dailyReminderEnabled: current?.dailyReminderEnabled ?? false, dailyReminderHour: current?.dailyReminderHour ?? 19, role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
 };

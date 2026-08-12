@@ -209,7 +209,7 @@
           "DynamoDBBillingMode": "PAY_PER_REQUEST",
           "DynamoDBEnableServerSideEncryption": false,
           "S3DeploymentBucket": "amplify-yahtzee-sandbox-87226-deployment",
-          "S3DeploymentRootKey": "amplify-appsync-files/ce0c7b6ca04c9e24065b111443e93c7c5e224da8",
+          "S3DeploymentRootKey": "amplify-appsync-files/001485fa5060eead541696abd73ca47da969032a",
           "env": "sandbox"
         }
       }
