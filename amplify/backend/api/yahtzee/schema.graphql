@@ -105,4 +105,6 @@ type AdminDashboard @aws_cognito_user_pools {
   upperBonusesEarned: Int!
   generatedAt: AWSDateTime!
   dailyActivity: AWSJSON!
+  users: AWSJSON!
+  recentSubmissions: AWSJSON!
 }

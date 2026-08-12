@@ -29,11 +29,23 @@ async function scanAll(TableName, options = {}) {
   return items;
 }
 
+async function listAllUsers() {
+  const users = [];
+  let PaginationToken;
+  do {
+    const result = await cognito.send(new ListUsersCommand({ UserPoolId: pool, Limit: 60, PaginationToken }));
+    users.push(...(result.Users ?? []));
+    PaginationToken = result.PaginationToken;
+  } while (PaginationToken);
+  return users;
+}
+
 async function adminDashboard(claims) {
   if (!isAdmin(claims)) throw new Error('Admin access required');
-  const [profiles, results] = await Promise.all([
-    scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('USER#') }, ProjectionExpression: 'pk' }),
-    scanAll(gameResultTable, { ProjectionExpression: 'userId, #mode, score, completedAt, yahtzeeCount, earnedUpperBonus', ExpressionAttributeNames: { '#mode': 'mode' } }),
+  const [profiles, results, cognitoUsers] = await Promise.all([
+    scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('USER#') } }),
+    scanAll(gameResultTable, { ProjectionExpression: 'id, userId, username, #mode, score, completedAt, yahtzeeCount, earnedUpperBonus', ExpressionAttributeNames: { '#mode': 'mode' } }),
+    listAllUsers(),
   ]);
   const now = new Date();
   const startOfToday = new Date(now); startOfToday.setUTCHours(0, 0, 0, 0);
@@ -48,8 +60,46 @@ async function adminDashboard(claims) {
     const games = results.filter((item) => item.completedAt?.S?.slice(0, 10) === key);
     return { date: key, games: games.length, players: new Set(games.map((item) => item.userId?.S).filter(Boolean)).size };
   });
+  const profileByUser = new Map(profiles.map((item) => [item.userId?.S, item]));
+  const resultsByUser = new Map();
+  for (const result of results) {
+    const userId = result.userId?.S;
+    if (!userId) continue;
+    const userResults = resultsByUser.get(userId) ?? [];
+    userResults.push(result);
+    resultsByUser.set(userId, userResults);
+  }
+  const users = cognitoUsers.map((user) => {
+    const attributes = Object.fromEntries((user.Attributes ?? []).map((attribute) => [attribute.Name, attribute.Value ?? '']));
+    const userId = attributes.sub ?? user.Username ?? '';
+    const profile = profileByUser.get(userId);
+    const games = (resultsByUser.get(userId) ?? []).sort((a, b) => String(b.completedAt?.S ?? '').localeCompare(String(a.completedAt?.S ?? '')));
+    const scores = games.map((game) => Number(game.score?.N ?? 0));
+    return {
+      userId,
+      email: attributes.email ?? '',
+      emailVerified: attributes.email_verified === 'true',
+      username: profile?.username?.S ?? attributes.preferred_username ?? '',
+      firstName: profile?.firstName?.S ?? attributes.given_name ?? '',
+      lastName: profile?.lastName?.S ?? attributes.family_name ?? '',
+      status: user.UserStatus ?? 'UNKNOWN',
+      enabled: user.Enabled !== false,
+      profileComplete: Boolean(profile?.username?.S),
+      signedUpAt: user.UserCreateDate?.toISOString() ?? null,
+      accountUpdatedAt: user.UserLastModifiedDate?.toISOString() ?? null,
+      lastPlayedAt: games[0]?.completedAt?.S ?? null,
+      gamesPlayed: games.length,
+      soloGames: games.filter((game) => game.mode?.S === 'SOLO').length,
+      dailyGames: games.filter((game) => game.mode?.S === 'DAILY').length,
+      bestScore: scores.length ? Math.max(...scores) : null,
+      averageScore: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
+    };
+  }).sort((a, b) => String(b.lastPlayedAt ?? b.signedUpAt ?? '').localeCompare(String(a.lastPlayedAt ?? a.signedUpAt ?? '')));
+  const recentSubmissions = [...results].sort((a, b) => String(b.completedAt?.S ?? '').localeCompare(String(a.completedAt?.S ?? ''))).slice(0, 50).map((result) => ({
+    id: result.id?.S ?? '', userId: result.userId?.S ?? '', username: result.username?.S ?? '', mode: result.mode?.S ?? '', score: Number(result.score?.N ?? 0), completedAt: result.completedAt?.S ?? '',
+  }));
   return {
-    totalUsers: profiles.length,
+    totalUsers: cognitoUsers.length,
     completedGames: results.length,
     soloGames: results.filter((item) => item.mode?.S === 'SOLO').length,
     dailyGames: results.filter((item) => item.mode?.S === 'DAILY').length,
@@ -63,6 +113,8 @@ async function adminDashboard(claims) {
     upperBonusesEarned: results.filter((item) => item.earnedUpperBonus?.BOOL).length,
     generatedAt: now.toISOString(),
     dailyActivity,
+    users,
+    recentSubmissions,
   };
 }
 const unconfirmedRetentionDays = Math.max(7, Number(process.env.UNCONFIRMED_RETENTION_DAYS ?? 14));
