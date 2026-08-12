@@ -10,6 +10,7 @@ amplify/mock-data/
 amplify/mock-api-resources/
 amplify/backend/amplify-meta.json
 amplify/backend/.temp/
+amplify/backend/api/*/build/states/
 amplify-build-config.json
 aws-exports.js
 src/amplifyconfiguration.json
