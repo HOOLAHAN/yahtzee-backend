@@ -62,7 +62,7 @@ async function adminDashboard(claims) {
     yahtzeesRolled: results.reduce((sum, item) => sum + Number(item.yahtzeeCount?.N ?? 0), 0),
     upperBonusesEarned: results.filter((item) => item.earnedUpperBonus?.BOOL).length,
     generatedAt: now.toISOString(),
-    dailyActivity: JSON.stringify(dailyActivity),
+    dailyActivity,
   };
 }
 const unconfirmedRetentionDays = Math.max(7, Number(process.env.UNCONFIRMED_RETENTION_DAYS ?? 14));
