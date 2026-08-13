@@ -70,6 +70,8 @@ type Mutation {
   submitDailyRoundProgress(challengeDate: AWSDate!, round: Int!, score: Int!): DailyRoundStanding! @aws_cognito_user_pools
   updateMyProfile(username: String!, firstName: String!, lastName: String!): UserProfile @aws_cognito_user_pools
   updateMyPreferences(scoreSuggestionsEnabled: Boolean!, dailyReminderEnabled: Boolean!, dailyReminderHour: Int!): UserProfile @aws_cognito_user_pools
+  updateMyPushNotifications(enabled: Boolean!, expoPushToken: String): UserProfile @aws_cognito_user_pools
+  sendAdminNotification(title: String!, body: String!, userIds: [ID!]): AdminNotificationResult! @aws_cognito_user_pools
   deleteMyProfile: Boolean! @aws_cognito_user_pools
 }
 
@@ -87,7 +89,14 @@ type UserProfile @aws_cognito_user_pools {
   scoreSuggestionsEnabled: Boolean!
   dailyReminderEnabled: Boolean!
   dailyReminderHour: Int!
+  pushNotificationsEnabled: Boolean!
   role: String!
+}
+
+type AdminNotificationResult @aws_cognito_user_pools {
+  audienceCount: Int!
+  sentCount: Int!
+  failedCount: Int!
 }
 
 type AdminDashboard @aws_cognito_user_pools {

@@ -13,6 +13,7 @@ const normalise = (value) => clean(value, 20).toLowerCase();
 const profileKey = (sub) => `USER#${sub}`;
 const usernameKey = (name) => `USERNAME#${normalise(name)}`;
 const dailyRoundPrefix = (date, round) => `DAILY#${date}#ROUND#${String(round).padStart(2, '0')}#`;
+const expoTokenPattern = /^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/;
 const isAdmin = (claims) => {
   const groups = claims?.['cognito:groups'];
   return Array.isArray(groups) ? groups.includes('Admin') : String(groups ?? '').split(',').some((group) => group.trim() === 'Admin');
@@ -93,6 +94,7 @@ async function adminDashboard(claims) {
       dailyGames: games.filter((game) => game.mode?.S === 'DAILY').length,
       bestScore: scores.length ? Math.max(...scores) : null,
       averageScore: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
+      pushNotificationsEnabled: profile?.pushNotificationsEnabled?.BOOL === true && expoTokenPattern.test(profile?.expoPushToken?.S ?? ''),
     };
   }).sort((a, b) => String(b.lastPlayedAt ?? b.signedUpAt ?? '').localeCompare(String(a.lastPlayedAt ?? a.signedUpAt ?? '')));
   const recentSubmissions = [...results].sort((a, b) => String(b.completedAt?.S ?? '').localeCompare(String(a.completedAt?.S ?? ''))).slice(0, 50).map((result) => ({
@@ -160,7 +162,108 @@ async function getProfile(sub) {
     scoreSuggestionsEnabled: item.scoreSuggestionsEnabled?.BOOL ?? true,
     dailyReminderEnabled: item.dailyReminderEnabled?.BOOL ?? false,
     dailyReminderHour: Number(item.dailyReminderHour?.N ?? 19),
+    pushNotificationsEnabled: item.pushNotificationsEnabled?.BOOL ?? false,
+    expoPushToken: item.expoPushToken?.S ?? '',
   } : null;
+}
+
+async function pushToExpo(messages) {
+  let sentCount = 0;
+  let failedCount = 0;
+  for (let index = 0; index < messages.length; index += 100) {
+    const batch = messages.slice(index, index + 100);
+    try {
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: { accept: 'application/json', 'accept-encoding': 'gzip, deflate', 'content-type': 'application/json' },
+        body: JSON.stringify(batch),
+      });
+      if (!response.ok) throw new Error(`Expo push request failed with HTTP ${response.status}`);
+      const payload = await response.json();
+      const tickets = Array.isArray(payload?.data) ? payload.data : [payload?.data];
+      for (const ticket of tickets) ticket?.status === 'ok' ? sentCount += 1 : failedCount += 1;
+    } catch (error) {
+      console.error('Expo push delivery failed', { message: error instanceof Error ? error.message : String(error), batchSize: batch.length });
+      failedCount += batch.length;
+    }
+  }
+  return { sentCount, failedCount };
+}
+
+async function notificationProfiles(userIds) {
+  const selected = userIds?.length ? new Set(userIds.map(String)) : null;
+  const profiles = await scanAll(table, {
+    FilterExpression: 'begins_with(pk, :prefix) AND pushNotificationsEnabled = :enabled',
+    ExpressionAttributeValues: { ':prefix': s('USER#'), ':enabled': { BOOL: true } },
+  });
+  return profiles.filter((profile) => (!selected || selected.has(profile.userId?.S)) && expoTokenPattern.test(profile.expoPushToken?.S ?? ''));
+}
+
+async function sendAdminNotification(claims, args) {
+  if (!isAdmin(claims)) throw new Error('Admin access required');
+  const title = clean(args.title, 60);
+  const body = clean(args.body, 220);
+  if (!title || !body) throw new Error('A notification title and message are required.');
+  const userIds = Array.isArray(args.userIds) ? [...new Set(args.userIds.map((id) => clean(id, 80)).filter(Boolean))] : [];
+  if (userIds.length > 500) throw new Error('Select no more than 500 users at once.');
+  const profiles = await notificationProfiles(userIds);
+  const delivered = await pushToExpo(profiles.map((profile) => ({
+    to: profile.expoPushToken.S,
+    sound: 'default',
+    title,
+    body,
+    data: { destination: 'stats', notificationType: 'admin' },
+  })));
+  console.info('Admin notification complete', { requestedBy: claims.sub, selectedUsers: userIds.length || 'all', audienceCount: profiles.length, ...delivered });
+  return { audienceCount: profiles.length, ...delivered };
+}
+
+function londonDateParts(date = new Date()) {
+  return Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+}
+
+async function sendDailyWinnerNotifications(now = new Date()) {
+  const london = londonDateParts(now);
+  if (Number(london.hour) !== 10) return { skipped: true, reason: 'Outside the 10am Europe/London window' };
+  const yesterdayParts = londonDateParts(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  const challengeDate = `${yesterdayParts.year}-${yesterdayParts.month}-${yesterdayParts.day}`;
+  const markerKey = `NOTIFICATION#DAILY_WINNERS#${challengeDate}`;
+  try {
+    await db.send(new PutItemCommand({
+      TableName: table,
+      Item: { pk: s(markerKey), createdAt: s(now.toISOString()), expiresAt: { N: String(Math.floor(now.getTime() / 1000) + 45 * 86400) } },
+      ConditionExpression: 'attribute_not_exists(pk)',
+    }));
+  } catch (error) {
+    if (error.name === 'ConditionalCheckFailedException') return { skipped: true, reason: 'Already sent', challengeDate };
+    throw error;
+  }
+
+  const results = await scanAll(gameResultTable, {
+    FilterExpression: '#mode = :daily AND challengeDate = :date',
+    ExpressionAttributeNames: { '#mode': 'mode' },
+    ExpressionAttributeValues: { ':daily': s('DAILY'), ':date': s(challengeDate) },
+    ProjectionExpression: 'userId, score, completedAt',
+  });
+  results.sort((a, b) => Number(b.score?.N ?? 0) - Number(a.score?.N ?? 0) || String(a.completedAt?.S ?? '').localeCompare(String(b.completedAt?.S ?? '')));
+  const winners = results.slice(0, 3);
+  const profiles = await notificationProfiles(winners.map((winner) => winner.userId?.S).filter(Boolean));
+  const profileByUser = new Map(profiles.map((profile) => [profile.userId?.S, profile]));
+  const messages = winners.flatMap((winner, index) => {
+    const profile = profileByUser.get(winner.userId?.S);
+    return profile ? [{
+      to: profile.expoPushToken.S,
+      sound: 'default',
+      title: `You finished #${index + 1} in the Daily Challenge!`,
+      body: `Your ${challengeDate} score of ${Number(winner.score?.N ?? 0)} earned a top-three finish.`,
+      data: { destination: 'stats', notificationType: 'daily-result', challengeDate, rank: index + 1 },
+    }] : [];
+  });
+  const delivered = await pushToExpo(messages);
+  console.info('Daily winner notifications complete', { challengeDate, winners: winners.length, audienceCount: messages.length, ...delivered });
+  return { challengeDate, audienceCount: messages.length, ...delivered };
 }
 
 async function writeAll(requestItems) {
@@ -311,6 +414,7 @@ async function submitDailyRoundProgress(sub, challengeDate, roundValue, scoreVal
 
 export const handler = async (event) => {
   if (event?.source === 'yahtzee.account-cleanup') return await cleanupUnconfirmedUsers();
+  if (event?.source === 'yahtzee.daily-winner-notifications') return await sendDailyWinnerNotifications();
   const field = event.field;
   if (field === 'usernameAvailable') {
     const username = clean(event.args.username, 20);
@@ -327,6 +431,7 @@ export const handler = async (event) => {
   const sub = claims?.sub;
   if (!sub) throw new Error('Authentication required');
   if (field === 'adminDashboard') return await adminDashboard(claims);
+  if (field === 'sendAdminNotification') return await sendAdminNotification(claims, event.args ?? {});
   if (field === 'submitDailyRoundProgress') {
     return await submitDailyRoundProgress(sub, event.args.challengeDate, event.args.round, event.args.score);
   }
@@ -339,6 +444,8 @@ export const handler = async (event) => {
       scoreSuggestionsEnabled: true,
       dailyReminderEnabled: false,
       dailyReminderHour: 19,
+      pushNotificationsEnabled: false,
+      expoPushToken: '',
     };
     return { ...profile, role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
   }
@@ -368,7 +475,22 @@ export const handler = async (event) => {
     await db.send(new TransactWriteItemsCommand({ TransactItems: [{ Put: { TableName: table, Item: {
       pk: s(profileKey(sub)), userId: s(sub), username: s(profile.username), usernameNormalised: s(normalise(profile.username)), firstName: s(profile.firstName), lastName: s(profile.lastName),
       scoreSuggestionsEnabled: { BOOL: profile.scoreSuggestionsEnabled }, dailyReminderEnabled: { BOOL: profile.dailyReminderEnabled }, dailyReminderHour: { N: String(profile.dailyReminderHour) },
+      pushNotificationsEnabled: { BOOL: current.pushNotificationsEnabled }, ...(current.expoPushToken ? { expoPushToken: s(current.expoPushToken) } : {}),
     } } }] }));
+    return { ...profile, role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
+  }
+  if (field === 'updateMyPushNotifications') {
+    const current = await getProfile(sub);
+    if (!current) throw new Error('Create your profile before enabling notifications.');
+    const enabled = Boolean(event.args.enabled);
+    const token = clean(event.args.expoPushToken, 220);
+    if (enabled && !expoTokenPattern.test(token || current.expoPushToken)) throw new Error('A valid device notification token is required.');
+    const profile = { ...current, pushNotificationsEnabled: enabled, expoPushToken: token || current.expoPushToken };
+    await db.send(new PutItemCommand({ TableName: table, Item: {
+      pk: s(profileKey(sub)), userId: s(sub), username: s(profile.username), usernameNormalised: s(normalise(profile.username)), firstName: s(profile.firstName), lastName: s(profile.lastName),
+      scoreSuggestionsEnabled: { BOOL: profile.scoreSuggestionsEnabled }, dailyReminderEnabled: { BOOL: profile.dailyReminderEnabled }, dailyReminderHour: { N: String(profile.dailyReminderHour) },
+      pushNotificationsEnabled: { BOOL: profile.pushNotificationsEnabled }, ...(profile.expoPushToken ? { expoPushToken: s(profile.expoPushToken) } : {}),
+    } }));
     return { ...profile, role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
   }
   if (field !== 'updateMyProfile') throw new Error('Unsupported operation');
@@ -391,6 +513,7 @@ export const handler = async (event) => {
       pk: s(profileKey(sub)), userId: s(sub), username: s(username),
       usernameNormalised: s(normalise(username)), firstName: s(firstName), lastName: s(lastName),
       scoreSuggestionsEnabled: { BOOL: current?.scoreSuggestionsEnabled ?? true }, dailyReminderEnabled: { BOOL: current?.dailyReminderEnabled ?? false }, dailyReminderHour: { N: String(current?.dailyReminderHour ?? 19) },
+      pushNotificationsEnabled: { BOOL: current?.pushNotificationsEnabled ?? false }, ...(current?.expoPushToken ? { expoPushToken: s(current.expoPushToken) } : {}),
     } } },
   ];
   if (current && normalise(current.username) !== normalise(username)) {
@@ -419,5 +542,5 @@ export const handler = async (event) => {
   }));
 
   if (!current || current.username !== username) await Promise.all([renameScores(sub, username), renameGameResults(sub, username)]);
-  return { userId: sub, username, firstName, lastName, scoreSuggestionsEnabled: current?.scoreSuggestionsEnabled ?? true, dailyReminderEnabled: current?.dailyReminderEnabled ?? false, dailyReminderHour: current?.dailyReminderHour ?? 19, role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
+  return { userId: sub, username, firstName, lastName, scoreSuggestionsEnabled: current?.scoreSuggestionsEnabled ?? true, dailyReminderEnabled: current?.dailyReminderEnabled ?? false, dailyReminderHour: current?.dailyReminderHour ?? 19, pushNotificationsEnabled: current?.pushNotificationsEnabled ?? false, expoPushToken: current?.expoPushToken ?? '', role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
 };
