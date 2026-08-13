@@ -43,10 +43,11 @@ async function listAllUsers() {
 
 async function adminDashboard(claims) {
   if (!isAdmin(claims)) throw new Error('Admin access required');
-  const [profiles, results, cognitoUsers] = await Promise.all([
+  const [profiles, results, cognitoUsers, notificationItems] = await Promise.all([
     scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('USER#') } }),
     scanAll(gameResultTable, { ProjectionExpression: 'id, userId, username, #mode, score, completedAt, yahtzeeCount, earnedUpperBonus', ExpressionAttributeNames: { '#mode': 'mode' } }),
     listAllUsers(),
+    scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('NOTIFICATION#CUSTOM#') } }),
   ]);
   const now = new Date();
   const startOfToday = new Date(now); startOfToday.setUTCHours(0, 0, 0, 0);
@@ -100,6 +101,11 @@ async function adminDashboard(claims) {
   const recentSubmissions = [...results].sort((a, b) => String(b.completedAt?.S ?? '').localeCompare(String(a.completedAt?.S ?? ''))).slice(0, 50).map((result) => ({
     id: result.id?.S ?? '', userId: result.userId?.S ?? '', username: result.username?.S ?? '', mode: result.mode?.S ?? '', score: Number(result.score?.N ?? 0), completedAt: result.completedAt?.S ?? '',
   }));
+  const notificationHistory = notificationItems.sort((a, b) => String(b.sentAt?.S ?? '').localeCompare(String(a.sentAt?.S ?? ''))).slice(0, 100).map((item) => ({
+    id: item.pk?.S ?? '', title: item.title?.S ?? '', body: item.body?.S ?? '', sentAt: item.sentAt?.S ?? '',
+    audience: item.audience?.S ?? 'all', selectedCount: Number(item.selectedCount?.N ?? 0), audienceCount: Number(item.audienceCount?.N ?? 0),
+    sentCount: Number(item.sentCount?.N ?? 0), failedCount: Number(item.failedCount?.N ?? 0), requestedBy: item.requestedBy?.S ?? '',
+  }));
   return {
     totalUsers: cognitoUsers.length,
     completedGames: results.length,
@@ -116,7 +122,7 @@ async function adminDashboard(claims) {
     generatedAt: now.toISOString(),
     dailyActivity,
     users,
-    recentSubmissions,
+    recentSubmissions: { scores: recentSubmissions, notifications: notificationHistory },
   };
 }
 const unconfirmedRetentionDays = Math.max(7, Number(process.env.UNCONFIRMED_RETENTION_DAYS ?? 14));
@@ -214,6 +220,12 @@ async function sendAdminNotification(claims, args) {
     body,
     data: { destination: 'stats', notificationType: 'admin' },
   })));
+  const sentAt = new Date().toISOString();
+  await db.send(new PutItemCommand({ TableName: table, Item: {
+    pk: s(`NOTIFICATION#CUSTOM#${sentAt}#${claims.sub}`), title: s(title), body: s(body), sentAt: s(sentAt), requestedBy: s(claims.sub),
+    audience: s(userIds.length ? 'selected' : 'all'), selectedCount: { N: String(userIds.length) }, audienceCount: { N: String(profiles.length) },
+    sentCount: { N: String(delivered.sentCount) }, failedCount: { N: String(delivered.failedCount) },
+  } }));
   console.info('Admin notification complete', { requestedBy: claims.sub, selectedUsers: userIds.length || 'all', audienceCount: profiles.length, ...delivered });
   return { audienceCount: profiles.length, ...delivered };
 }
