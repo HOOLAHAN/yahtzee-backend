@@ -14,6 +14,9 @@ type Score
 enum GameMode {
   SOLO
   DAILY
+  COMPUTER
+  PASS
+  REAL
 }
 
 # Immutable V2 completion records. The existing Score model remains the
@@ -39,6 +42,7 @@ type GameResult
   noZeroScores: Boolean!
   yahtzeeOnFinalRoll: Boolean!
   scorecard: AWSJSON
+  session: AWSJSON
 }
 
 input SubmitGameResultInput {
@@ -53,6 +57,7 @@ input SubmitGameResultInput {
   noZeroScores: Boolean!
   yahtzeeOnFinalRoll: Boolean!
   scorecard: AWSJSON
+  session: AWSJSON
 }
 
 type DailyRoundStanding @aws_cognito_user_pools {

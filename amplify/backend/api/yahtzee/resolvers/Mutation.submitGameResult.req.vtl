@@ -19,7 +19,7 @@
   #set($modeDate = "DAILY#${ctx.args.input.challengeDate}")
 #else
   #set($id = $ctx.args.input.id)
-  #set($modeDate = "SOLO#ALL")
+  #set($modeDate = "${mode}#ALL")
 #end
 {
   "version": "2018-05-29",
@@ -40,6 +40,7 @@
     "noZeroScores": $util.dynamodb.toDynamoDBJson($ctx.args.input.noZeroScores),
     "yahtzeeOnFinalRoll": $util.dynamodb.toDynamoDBJson($ctx.args.input.yahtzeeOnFinalRoll),
     "scorecard": $util.dynamodb.toDynamoDBJson($ctx.args.input.scorecard),
+    "session": $util.dynamodb.toDynamoDBJson($ctx.args.input.session),
     "createdAt": $util.dynamodb.toDynamoDBJson($timestamp),
     "updatedAt": $util.dynamodb.toDynamoDBJson($timestamp),
     "__typename": $util.dynamodb.toDynamoDBJson("GameResult")
