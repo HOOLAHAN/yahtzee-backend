@@ -24,7 +24,10 @@ playerNames.forEach((name, playerIndex) => {
   // Several Solo games per user deliberately exercise highest-score deduping.
   for (let game = 0; game < 7; game += 1) {
     const score = Math.min(355, 155 + playerIndex * 11 + game * 9 + (playerIndex === 0 ? game * 16 : 0));
-    const completedAt = isoDaysAgo((playerIndex + game * 2) % 32, 9 + game, playerIndex * 3);
+    // Give every player a result today so calendar-week filtering is useful
+    // even when the seed is run on a Monday. Older games exercise Month/All Time.
+    const daysAgo = game === 0 ? 0 : game * 5 + (playerIndex % 4);
+    const completedAt = isoDaysAgo(daysAgo, 9 + game, playerIndex * 3);
     records.push(item({
       id: `seed-v32-solo-${playerIndex + 1}-${game + 1}`, userId, username, mode: 'SOLO', modeDate: 'SOLO#ALL', score, completedAt,
       yahtzeeCount: score >= 300 ? 1 : 0, earnedUpperBonus: score >= 230, completedSmallStraight: score >= 190,
