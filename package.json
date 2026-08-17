@@ -10,6 +10,7 @@
     "deploy:profile:sandbox": "node scripts/deploy-profile-sandbox.mjs",
     "deploy:profile:production": "node scripts/deploy-profile-production.mjs",
     "configure:cleanup:sandbox": "node scripts/configure-account-cleanup.mjs sandbox",
+    "seed:leaderboards:sandbox": "node scripts/seed-sandbox-leaderboards.mjs",
     "configure:cleanup:production": "node scripts/configure-account-cleanup.mjs production"
   }
 }
