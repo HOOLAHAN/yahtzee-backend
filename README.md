@@ -50,6 +50,12 @@ Deploy a profile Lambda code change after the Amplify deployment:
 npm run deploy:profile:sandbox
 ```
 
+Restore the manually managed profile-service resolvers after an Amplify push:
+
+```bash
+npm run configure:resolvers:sandbox
+```
+
 After deploying the profile Lambda, configure its idempotent daily cleanup of
 Cognito accounts that remain unconfirmed for more than 14 days:
 
@@ -75,6 +81,12 @@ Profile Lambda production changes use the same explicit guard:
 
 ```bash
 CONFIRM_PRODUCTION=deploy-existing-yahtzee-production npm run deploy:profile:production
+```
+
+Restore the guarded production profile-service resolvers after an Amplify push:
+
+```bash
+CONFIRM_PRODUCTION=deploy-existing-yahtzee-production npm run configure:resolvers:production
 ```
 
 Then configure the guarded production schedule:
