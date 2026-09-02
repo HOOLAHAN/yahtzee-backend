@@ -1,4 +1,4 @@
-import { CognitoIdentityProviderClient, AdminDeleteUserCommand, AdminUpdateUserAttributesCommand, ListUsersCommand } from '@aws-sdk/client-cognito-identity-provider';
+import { CognitoIdentityProviderClient, AdminDeleteUserCommand, AdminUpdateUserAttributesCommand, ListUsersCommand, ListUsersInGroupCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { BatchWriteItemCommand, DynamoDBClient, GetItemCommand, PutItemCommand, ScanCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
 
 const db = new DynamoDBClient({});
@@ -41,13 +41,25 @@ async function listAllUsers() {
   return users;
 }
 
+async function listGroupUsernames(GroupName) {
+  const usernames = new Set();
+  let NextToken;
+  do {
+    const result = await cognito.send(new ListUsersInGroupCommand({ UserPoolId: pool, GroupName, Limit: 60, NextToken }));
+    for (const user of result.Users ?? []) if (user.Username) usernames.add(user.Username);
+    NextToken = result.NextToken;
+  } while (NextToken);
+  return usernames;
+}
+
 async function adminDashboard(claims) {
   if (!isAdmin(claims)) throw new Error('Admin access required');
-  const [profiles, results, cognitoUsers, notificationItems] = await Promise.all([
+  const [profiles, results, cognitoUsers, notificationItems, adminUsernames] = await Promise.all([
     scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('USER#') } }),
     scanAll(gameResultTable, { ProjectionExpression: 'id, userId, username, #mode, score, completedAt, yahtzeeCount, earnedUpperBonus', ExpressionAttributeNames: { '#mode': 'mode' } }),
     listAllUsers(),
     scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('NOTIFICATION#CUSTOM#') } }),
+    listGroupUsernames('Admin'),
   ]);
   const now = new Date();
   const startOfToday = new Date(now); startOfToday.setUTCHours(0, 0, 0, 0);
@@ -96,6 +108,7 @@ async function adminDashboard(claims) {
       bestScore: scores.length ? Math.max(...scores) : null,
       averageScore: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
       pushNotificationsEnabled: profile?.pushNotificationsEnabled?.BOOL === true && expoTokenPattern.test(profile?.expoPushToken?.S ?? ''),
+      isAdmin: adminUsernames.has(user.Username ?? ''),
     };
   }).sort((a, b) => String(b.lastPlayedAt ?? b.signedUpAt ?? '').localeCompare(String(a.lastPlayedAt ?? a.signedUpAt ?? '')));
   const recentSubmissions = [...results].sort((a, b) => String(b.completedAt?.S ?? '').localeCompare(String(a.completedAt?.S ?? ''))).slice(0, 50).map((result) => ({

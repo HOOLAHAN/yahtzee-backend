@@ -30,7 +30,7 @@ const poolArn = `arn:aws:cognito-idp:${region}:${accountId}:userpool/${poolId}`;
 
 aws(['iam', 'put-role-policy', '--role-name', roleName, '--policy-name', 'YahtzeeUnconfirmedAccountCleanup', '--policy-document', JSON.stringify({
   Version: '2012-10-17',
-  Statement: [{ Effect: 'Allow', Action: ['cognito-idp:ListUsers', 'cognito-idp:AdminDeleteUser'], Resource: poolArn }],
+  Statement: [{ Effect: 'Allow', Action: ['cognito-idp:ListUsers', 'cognito-idp:ListUsersInGroup', 'cognito-idp:AdminDeleteUser'], Resource: poolArn }],
 })]);
 const ruleArn = JSON.parse(aws(['events', 'put-rule', '--name', ruleName, '--schedule-expression', 'cron(15 3 * * ? *)', '--state', 'ENABLED', '--description', 'Delete Yahtzee Cognito accounts still unconfirmed after the retention period', '--output', 'json'])).RuleArn;
 const permission = aws(['lambda', 'add-permission', '--function-name', functionName, '--statement-id', statementId, '--action', 'lambda:InvokeFunction', '--principal', 'events.amazonaws.com', '--source-arn', ruleArn], { allowFailure: true });

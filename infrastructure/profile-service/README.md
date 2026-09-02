@@ -32,7 +32,7 @@ The same Lambda accepts the scheduled EventBridge source
 `yahtzee.account-cleanup`. It deletes only Cognito users that are still
 `UNCONFIRMED` after 14 days (configurable with
 `UNCONFIRMED_RETENTION_DAYS`). Verified users and DynamoDB profile/score data
-are never included. The Lambda role therefore also needs `ListUsers` and
-`AdminDeleteUser` on the environment's user pool. Configure one daily
+are never included. The Lambda role therefore also needs `ListUsers`,
+`ListUsersInGroup`, and `AdminDeleteUser` on the environment's user pool. Configure one daily
 EventBridge invocation for each environment after applying the documented IAM
 policy.
