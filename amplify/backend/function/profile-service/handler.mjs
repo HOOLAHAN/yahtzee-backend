@@ -528,9 +528,14 @@ async function saveLiveGame(state, expectedVersion) {
   return next;
 }
 
-async function notifyLivePlayer(userId, title, body, gameId) {
+async function notifyLivePlayer(userId, title, body, gameId, actorUserId) {
   if (!userId) return;
-  const profiles = await notificationProfiles([userId]);
+  let profiles = await notificationProfiles([userId]);
+  if (actorUserId) {
+    const actorProfile = await getProfile(actorUserId);
+    const actorToken = actorProfile?.expoPushToken;
+    if (actorToken) profiles = profiles.filter((profile) => profile.expoPushToken?.S !== actorToken);
+  }
   if (!profiles.length) return;
   await pushToExpo(profiles.map((profile) => ({ to: profile.expoPushToken.S, sound: 'default', title, body, data: { destination: 'live-game', notificationType: 'live-game', gameId } })));
 }
@@ -567,7 +572,7 @@ async function joinLiveGame(sub, claims, rawCode) {
   if (current.state.hostUserId === sub) throw new Error('Share this code with another signed-in player.');
   const profile = await getProfile(sub);
   const next = await saveLiveGame({ ...current.state, status: 'ACTIVE', guestUserId: sub, guestUsername: profile?.username || claims.preferred_username || claims.email || 'Player', currentUserId: current.state.hostUserId }, current.version);
-  await notifyLivePlayer(next.hostUserId, `${next.guestUsername} joined your game`, 'Your first turn is ready.', next.id);
+  await notifyLivePlayer(next.hostUserId, `${next.guestUsername} joined your game`, 'Your first turn is ready.', next.id, sub);
   return liveResponse(next);
 }
 
@@ -593,7 +598,7 @@ async function abandonLiveGamesForUser(sub) {
     try {
       const next = await saveLiveGame({ ...state, status: 'ABANDONED', endedByUserId: sub }, Number(item.version?.N ?? 0));
       const opponentId = sub === next.hostUserId ? next.guestUserId : next.hostUserId;
-      await notifyLivePlayer(opponentId, 'Remote game ended', `${sub === next.hostUserId ? next.hostUsername : next.guestUsername} left the game.`, next.id);
+      await notifyLivePlayer(opponentId, 'Remote game ended', `${sub === next.hostUserId ? next.hostUsername : next.guestUsername} left the game.`, next.id, sub);
     } catch (error) {
       if (error.message !== 'The game changed on the other device. Please try again.') throw error;
     }
@@ -610,7 +615,7 @@ async function updateLiveGame(sub, id, rawAction) {
     if (!['WAITING', 'ACTIVE'].includes(state.status)) return liveResponse(state);
     const next = await saveLiveGame({ ...state, status: 'ABANDONED', endedByUserId: sub }, current.version);
     const opponentId = sub === next.hostUserId ? next.guestUserId : next.hostUserId;
-    await notifyLivePlayer(opponentId, 'Remote game ended', `${sub === next.hostUserId ? next.hostUsername : next.guestUsername} left the game.`, next.id);
+    await notifyLivePlayer(opponentId, 'Remote game ended', `${sub === next.hostUserId ? next.hostUsername : next.guestUsername} left the game.`, next.id, sub);
     return liveResponse(next);
   }
   if (state.status !== 'ACTIVE') throw new Error('The game is not active yet.');
@@ -649,7 +654,7 @@ async function updateLiveGame(sub, id, rawAction) {
   const saved = await saveLiveGame(next, current.version);
   if (action.type === 'LOCK_CATEGORY' && saved.status === 'ACTIVE') {
     const actor = sub === saved.hostUserId ? saved.hostUsername : saved.guestUsername;
-    await notifyLivePlayer(saved.currentUserId, 'Your turn', `${actor} finished Round ${Math.max(saved.hostScores.length, saved.guestScores.length)}.`, saved.id);
+    await notifyLivePlayer(saved.currentUserId, 'Your turn', `${actor} finished Round ${Math.max(saved.hostScores.length, saved.guestScores.length)}.`, saved.id, sub);
   }
   return liveResponse(saved);
 }
