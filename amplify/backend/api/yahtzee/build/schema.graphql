@@ -153,6 +153,10 @@ type AdminDashboard @aws_cognito_user_pools {
   completedGames: Int!
   soloGames: Int!
   dailyGames: Int!
+  remoteGames: Int!
+  remoteMatches: Int!
+  remoteWins: Int!
+  remoteDraws: Int!
   gamesToday: Int!
   gamesLast7Days: Int!
   gamesLast30Days: Int!

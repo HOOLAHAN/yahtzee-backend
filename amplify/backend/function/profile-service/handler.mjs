@@ -61,7 +61,7 @@ async function adminDashboard(claims) {
   if (!isAdmin(claims)) throw new Error('Admin access required');
   const [profiles, results, cognitoUsers, notificationItems, adminUsernames] = await Promise.all([
     scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('USER#') } }),
-    scanAll(gameResultTable, { ProjectionExpression: 'id, userId, username, #mode, score, completedAt, yahtzeeCount, earnedUpperBonus', ExpressionAttributeNames: { '#mode': 'mode' } }),
+    scanAll(gameResultTable, { ProjectionExpression: 'id, userId, username, #mode, score, completedAt, yahtzeeCount, earnedUpperBonus, #session', ExpressionAttributeNames: { '#mode': 'mode', '#session': 'session' } }),
     listAllUsers(),
     scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('NOTIFICATION#CUSTOM#') } }),
     listGroupUsernames('Admin'),
@@ -71,6 +71,9 @@ async function adminDashboard(claims) {
   const daysAgo = (days) => new Date(now.getTime() - days * 86400000);
   const last7 = daysAgo(7); const last30 = daysAgo(30);
   const completedAt = (item) => new Date(item.completedAt?.S ?? 0);
+  const sessionFor = (item) => { try { let value = item.session?.S; for (let pass = 0; pass < 2 && typeof value === 'string'; pass += 1) value = JSON.parse(value); return value && typeof value === 'object' ? value : {}; } catch { return {}; } };
+  const remoteResults = results.filter((item) => item.mode?.S === 'REMOTE');
+  const remoteMatchIds = new Set(remoteResults.map((item) => sessionFor(item).liveGameId).filter(Boolean));
   const recent7 = results.filter((item) => completedAt(item) >= last7);
   const recent30 = results.filter((item) => completedAt(item) >= last30);
   const dailyActivity = Array.from({ length: 14 }, (_, index) => {
@@ -110,6 +113,8 @@ async function adminDashboard(claims) {
       gamesPlayed: games.length,
       soloGames: games.filter((game) => game.mode?.S === 'SOLO').length,
       dailyGames: games.filter((game) => game.mode?.S === 'DAILY').length,
+      remoteGames: games.filter((game) => game.mode?.S === 'REMOTE').length,
+      remoteWins: games.filter((game) => game.mode?.S === 'REMOTE' && sessionFor(game).outcome === 'WIN').length,
       bestScore: scores.length ? Math.max(...scores) : null,
       averageScore: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
       pushNotificationsEnabled: profile?.pushNotificationsEnabled?.BOOL === true && expoTokenPattern.test(profile?.expoPushToken?.S ?? ''),
@@ -129,6 +134,10 @@ async function adminDashboard(claims) {
     completedGames: results.length,
     soloGames: results.filter((item) => item.mode?.S === 'SOLO').length,
     dailyGames: results.filter((item) => item.mode?.S === 'DAILY').length,
+    remoteGames: remoteResults.length,
+    remoteMatches: remoteMatchIds.size || Math.ceil(remoteResults.length / 2),
+    remoteWins: remoteResults.filter((item) => sessionFor(item).outcome === 'WIN').length,
+    remoteDraws: Math.ceil(remoteResults.filter((item) => sessionFor(item).outcome === 'DRAW').length / 2),
     gamesToday: results.filter((item) => completedAt(item) >= startOfToday).length,
     gamesLast7Days: recent7.length,
     gamesLast30Days: recent30.length,
