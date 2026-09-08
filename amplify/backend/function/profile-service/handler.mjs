@@ -561,6 +561,32 @@ async function createLiveGame(sub, claims) {
   throw new Error('Unable to reserve a game code. Please try again.');
 }
 
+async function createLiveRematch(previous, requester) {
+  if (previous.status !== 'COMPLETED' || !previous.guestUserId) throw new Error('This game cannot be replayed yet.');
+  const existingItems = await scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('LIVE#') }, ProjectionExpression: '#state', ExpressionAttributeNames: { '#state': 'state' } });
+  const existing = existingItems.map(parseLiveItem).find((state) => state?.rematchOfGameId === previous.id && ['WAITING', 'ACTIVE'].includes(state.status));
+  if (existing) return liveResponse(existing);
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const id = randomUUID();
+    const code = String(randomInt(0, 1000000)).padStart(6, '0');
+    const now = new Date().toISOString();
+    const starter = requester === previous.hostUserId ? previous.guestUserId : previous.hostUserId;
+    const state = { id, code, status: 'ACTIVE', hostUserId: previous.hostUserId, hostUsername: previous.hostUsername, guestUserId: previous.guestUserId, guestUsername: previous.guestUsername, currentUserId: starter, round: 1, dice: [1, 1, 1, 1, 1], held: [], rollsLeft: 3, hasRolled: false, selectedCategory: null, hostScores: [], guestScores: [], winnerUserId: null, endedByUserId: null, rematchOfGameId: previous.id, createdAt: now, updatedAt: now };
+    try {
+      await db.send(new TransactWriteItemsCommand({ TransactItems: [
+        { Put: { TableName: table, Item: { pk: s(liveGameKey(id)), state: s(JSON.stringify(state)), version: { N: '1' }, expiresAt: { N: String(Math.floor(Date.now() / 1000) + 7 * 86400) } }, ConditionExpression: 'attribute_not_exists(pk)' } },
+        { Put: { TableName: table, Item: { pk: s(liveCodeKey(code)), gameId: s(id), expiresAt: { N: String(Math.floor(Date.now() / 1000) + 24 * 3600) } }, ConditionExpression: 'attribute_not_exists(pk)' } },
+      ] }));
+      const opponentId = requester === state.hostUserId ? state.guestUserId : state.hostUserId;
+      try { await notifyLivePlayer(opponentId, 'Rematch ready', `${requester === state.hostUserId ? state.hostUsername : state.guestUsername} started another game.`, state.id, requester); } catch { /* The match is created even if push delivery is unavailable. */ }
+      return liveResponse(state);
+    } catch (error) {
+      if (error.name !== 'TransactionCanceledException') throw error;
+    }
+  }
+  throw new Error('Unable to start the rematch. Please try again.');
+}
+
 async function joinLiveGame(sub, claims, rawCode) {
   const code = clean(rawCode, 6);
   if (!/^\d{6}$/.test(code)) throw new Error('Enter the six-digit game code.');
@@ -569,6 +595,7 @@ async function joinLiveGame(sub, claims, rawCode) {
   if (!id) throw new Error('That game code was not found or has expired.');
   const current = await readLiveGame(id);
   if (!current.state || current.state.status !== 'WAITING') throw new Error('That game is no longer waiting for a player.');
+  if (Date.now() - new Date(current.state.createdAt).getTime() > 24 * 60 * 60 * 1000) throw new Error('That game invitation has expired. Ask your friend to create a new one.');
   if (current.state.hostUserId === sub) throw new Error('Share this code with another signed-in player.');
   const profile = await getProfile(sub);
   const next = await saveLiveGame({ ...current.state, status: 'ACTIVE', guestUserId: sub, guestUsername: profile?.username || claims.preferred_username || claims.email || 'Player', currentUserId: current.state.hostUserId }, current.version);
@@ -584,7 +611,7 @@ async function getLiveGameForUser(sub, id) {
 
 async function listLiveGames(sub) {
   const items = await scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('LIVE#') }, ProjectionExpression: '#state', ExpressionAttributeNames: { '#state': 'state' } });
-  return items.map(parseLiveItem).filter((state) => state && (state.hostUserId === sub || state.guestUserId === sub) && ['WAITING', 'ACTIVE'].includes(state.status)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(liveResponse);
+  return items.map(parseLiveItem).filter((state) => state && (state.hostUserId === sub || state.guestUserId === sub) && ['WAITING', 'ACTIVE'].includes(state.status) && (state.status !== 'WAITING' || Date.now() - new Date(state.createdAt).getTime() <= 24 * 60 * 60 * 1000)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(liveResponse);
 }
 
 async function abandonLiveGamesForUser(sub) {
@@ -611,9 +638,12 @@ async function updateLiveGame(sub, id, rawAction) {
   const current = await readLiveGame(clean(id, 80));
   const state = current.state;
   assertLiveParticipant(state, sub);
+  const actionId = clean(action?.actionId, 80);
+  if (actionId && (state.processedActionIds || []).includes(actionId)) return liveResponse(state);
+  if (action?.type === 'REMATCH') return await createLiveRematch(state, sub);
   if (action?.type === 'LEAVE') {
     if (!['WAITING', 'ACTIVE'].includes(state.status)) return liveResponse(state);
-    const next = await saveLiveGame({ ...state, status: 'ABANDONED', endedByUserId: sub }, current.version);
+    const next = await saveLiveGame({ ...state, status: 'ABANDONED', endedByUserId: sub, processedActionIds: actionId ? [...(state.processedActionIds || []), actionId].slice(-40) : state.processedActionIds }, current.version);
     const opponentId = sub === next.hostUserId ? next.guestUserId : next.hostUserId;
     await notifyLivePlayer(opponentId, 'Remote game ended', `${sub === next.hostUserId ? next.hostUsername : next.guestUsername} left the game.`, next.id, sub);
     return liveResponse(next);
@@ -651,6 +681,7 @@ async function updateLiveGame(sub, id, rawAction) {
       next = newLiveTurn(next);
     }
   } else throw new Error('Unsupported game action.');
+  if (actionId) next.processedActionIds = [...(state.processedActionIds || []), actionId].slice(-40);
   const saved = await saveLiveGame(next, current.version);
   if (action.type === 'LOCK_CATEGORY' && saved.status === 'ACTIVE') {
     const actor = sub === saved.hostUserId ? saved.hostUsername : saved.guestUsername;
