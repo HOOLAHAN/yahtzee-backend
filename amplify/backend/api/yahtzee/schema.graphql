@@ -17,6 +17,7 @@ enum GameMode {
   COMPUTER
   PASS
   REAL
+  REMOTE
 }
 
 # Immutable V2 completion records. The existing Score model remains the
@@ -78,12 +79,46 @@ type Mutation {
   updateMyPushNotifications(enabled: Boolean!, expoPushToken: String): UserProfile @aws_cognito_user_pools
   sendAdminNotification(title: String!, body: String!, userIds: [ID!]): AdminNotificationResult! @aws_cognito_user_pools
   deleteMyProfile: Boolean! @aws_cognito_user_pools
+  createLiveGame: LiveGame! @aws_cognito_user_pools
+  joinLiveGame(code: String!): LiveGame! @aws_cognito_user_pools
+  updateLiveGame(gameId: ID!, action: AWSJSON!): LiveGame! @aws_cognito_user_pools
 }
 
 type Query {
   myProfile: UserProfile @aws_cognito_user_pools
   usernameAvailable(username: String!): Boolean! @aws_api_key
   adminDashboard: AdminDashboard! @aws_cognito_user_pools
+  liveGame(gameId: ID!): LiveGame! @aws_cognito_user_pools
+  myLiveGames: [LiveGame!]! @aws_cognito_user_pools
+}
+
+type Subscription {
+  onLiveGameChanged(id: ID!): LiveGame
+    @aws_subscribe(mutations: ["joinLiveGame", "updateLiveGame"])
+    @aws_cognito_user_pools
+}
+
+type LiveGame @aws_cognito_user_pools {
+  id: ID!
+  code: String!
+  status: String!
+  hostUserId: ID!
+  hostUsername: String!
+  guestUserId: ID
+  guestUsername: String
+  currentUserId: ID!
+  round: Int!
+  dice: AWSJSON!
+  held: AWSJSON!
+  rollsLeft: Int!
+  hasRolled: Boolean!
+  selectedCategory: String
+  hostScores: AWSJSON!
+  guestScores: AWSJSON!
+  winnerUserId: ID
+  endedByUserId: ID
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
 }
 
 type UserProfile @aws_cognito_user_pools {

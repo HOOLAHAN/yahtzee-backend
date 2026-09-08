@@ -11,6 +11,11 @@ const resolvers = [
   { type: 'Query', field: 'adminDashboard' },
   { type: 'Mutation', field: 'updateMyPushNotifications' },
   { type: 'Mutation', field: 'sendAdminNotification' },
+  { type: 'Mutation', field: 'createLiveGame' },
+  { type: 'Mutation', field: 'joinLiveGame' },
+  { type: 'Mutation', field: 'updateLiveGame' },
+  { type: 'Query', field: 'liveGame' },
+  { type: 'Query', field: 'myLiveGames' },
 ];
 for (const { type, field } of resolvers) {
   const resolverArgs = ['--api-id', apiId, '--type-name', type, '--field-name', field, '--data-source-name', 'ProfileService', '--request-mapping-template', readFileSync(`amplify/backend/api/yahtzee/resolvers/${type}.${field}.req.vtl`, 'utf8'), '--response-mapping-template', readFileSync(`amplify/backend/api/yahtzee/resolvers/${type}.${field}.res.vtl`, 'utf8'), '--region', region];

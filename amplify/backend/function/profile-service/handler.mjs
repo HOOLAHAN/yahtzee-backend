@@ -1,5 +1,6 @@
 import { CognitoIdentityProviderClient, AdminDeleteUserCommand, AdminUpdateUserAttributesCommand, ListUsersCommand, ListUsersInGroupCommand } from '@aws-sdk/client-cognito-identity-provider';
 import { BatchWriteItemCommand, DynamoDBClient, GetItemCommand, PutItemCommand, ScanCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
+import { randomInt, randomUUID } from 'node:crypto';
 
 const db = new DynamoDBClient({});
 const cognito = new CognitoIdentityProviderClient({});
@@ -14,6 +15,10 @@ const profileKey = (sub) => `USER#${sub}`;
 const usernameKey = (name) => `USERNAME#${normalise(name)}`;
 const dailyRoundPrefix = (date, round) => `DAILY#${date}#ROUND#${String(round).padStart(2, '0')}#`;
 const expoTokenPattern = /^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/;
+const liveGameKey = (id) => `LIVE#${id}`;
+const liveCodeKey = (code) => `LIVE_CODE#${code}`;
+const liveCategories = ['Ones', 'Twos', 'Threes', 'Fours', 'Fives', 'Sixes', 'Three of a Kind', 'Four of a Kind', 'Full House', 'Small Straight', 'Large Straight', 'Yahtzee', 'Chance'];
+const liveUpperCategories = liveCategories.slice(0, 6);
 const isAdmin = (claims) => {
   const groups = claims?.['cognito:groups'];
   return Array.isArray(groups) ? groups.includes('Admin') : String(groups ?? '').split(',').some((group) => group.trim() === 'Admin');
@@ -437,6 +442,209 @@ async function submitDailyRoundProgress(sub, challengeDate, roundValue, scoreVal
   };
 }
 
+const liveCounts = (dice) => Object.values(dice.reduce((counts, die) => ({ ...counts, [die]: (counts[die] ?? 0) + 1 }), {}));
+const liveIsYahtzee = (dice) => dice.length === 5 && dice.every((die) => die === dice[0]);
+const liveHasStraight = (dice, length) => {
+  const values = [...new Set(dice)].sort((a, b) => a - b);
+  let run = 1;
+  for (let index = 1; index < values.length; index += 1) {
+    run = values[index] === values[index - 1] + 1 ? run + 1 : 1;
+    if (run >= length) return true;
+  }
+  return false;
+};
+const liveBaseScore = (category, dice) => {
+  const sum = dice.reduce((total, die) => total + die, 0);
+  const counts = liveCounts(dice);
+  const upperIndex = liveCategories.indexOf(category);
+  if (upperIndex >= 0 && upperIndex < 6) return dice.filter((die) => die === upperIndex + 1).reduce((total, die) => total + die, 0);
+  if (category === 'Three of a Kind') return counts.some((count) => count >= 3) ? sum : 0;
+  if (category === 'Four of a Kind') return counts.some((count) => count >= 4) ? sum : 0;
+  if (category === 'Full House') return counts.includes(3) && counts.includes(2) ? 25 : 0;
+  if (category === 'Small Straight') return liveHasStraight(dice, 4) ? 30 : 0;
+  if (category === 'Large Straight') return liveHasStraight(dice, 5) ? 40 : 0;
+  if (category === 'Yahtzee') return counts.includes(5) ? 50 : 0;
+  if (category === 'Chance') return sum;
+  return 0;
+};
+const liveCategoryEligible = (category, dice, scores) => {
+  const used = new Set(scores.map((entry) => entry.category));
+  if (!liveCategories.includes(category) || used.has(category)) return false;
+  const yahtzeeEntry = scores.find((entry) => entry.category === 'Yahtzee');
+  if (!liveIsYahtzee(dice) || !yahtzeeEntry) return true;
+  const matchingUpper = liveUpperCategories[dice[0] - 1];
+  if (!used.has(matchingUpper)) return category === matchingUpper;
+  const openLower = liveCategories.slice(6).some((lower) => !used.has(lower));
+  return openLower ? !liveUpperCategories.includes(category) : liveUpperCategories.includes(category);
+};
+const liveScoreCategory = (category, dice, scores) => {
+  if (!liveCategoryEligible(category, dice, scores)) throw new Error('That category is not available for this roll.');
+  if (scores.some((entry) => entry.category === 'Yahtzee') && liveIsYahtzee(dice)) {
+    if (category === 'Full House') return 25;
+    if (category === 'Small Straight') return 30;
+    if (category === 'Large Straight') return 40;
+  }
+  return liveBaseScore(category, dice);
+};
+const liveBonus = (scores, dice) => liveIsYahtzee(dice) && scores.some((entry) => entry.category === 'Yahtzee' && entry.score === 50) ? 100 : 0;
+const liveUpperSubtotal = (scores) => scores.filter((entry) => liveUpperCategories.includes(entry.category)).reduce((total, entry) => total + entry.score, 0);
+const liveTotal = (scores) => scores.reduce((total, entry) => total + entry.score + (entry.yahtzeeBonus ?? 0), 0) + (liveUpperSubtotal(scores) >= 63 ? 35 : 0);
+const newLiveTurn = (state) => ({ ...state, dice: [1, 1, 1, 1, 1], held: [], rollsLeft: 3, hasRolled: false, selectedCategory: null });
+const liveResponse = (state) => ({ ...state, dice: JSON.stringify(state.dice), held: JSON.stringify(state.held), hostScores: JSON.stringify(state.hostScores), guestScores: JSON.stringify(state.guestScores) });
+const parseLiveItem = (item) => item?.state?.S ? JSON.parse(item.state.S) : null;
+
+async function readLiveGame(id) {
+  const result = await db.send(new GetItemCommand({ TableName: table, Key: { pk: s(liveGameKey(id)) }, ConsistentRead: true }));
+  return { state: parseLiveItem(result.Item), version: Number(result.Item?.version?.N ?? 0) };
+}
+
+function assertLiveParticipant(state, sub) {
+  if (!state || (state.hostUserId !== sub && state.guestUserId !== sub)) throw new Error('Live game not found.');
+}
+
+async function saveLiveGame(state, expectedVersion) {
+  const now = new Date().toISOString();
+  const next = { ...state, updatedAt: now };
+  try {
+    await db.send(new PutItemCommand({
+      TableName: table,
+      Item: { pk: s(liveGameKey(state.id)), state: s(JSON.stringify(next)), version: { N: String(expectedVersion + 1) }, expiresAt: { N: String(Math.floor(Date.now() / 1000) + 7 * 86400) } },
+      ConditionExpression: 'version = :expectedVersion',
+      ExpressionAttributeValues: { ':expectedVersion': { N: String(expectedVersion) } },
+    }));
+  } catch (error) {
+    if (error.name === 'ConditionalCheckFailedException') throw new Error('The game changed on the other device. Please try again.');
+    throw error;
+  }
+  return next;
+}
+
+async function notifyLivePlayer(userId, title, body, gameId) {
+  if (!userId) return;
+  const profiles = await notificationProfiles([userId]);
+  if (!profiles.length) return;
+  await pushToExpo(profiles.map((profile) => ({ to: profile.expoPushToken.S, sound: 'default', title, body, data: { destination: 'live-game', notificationType: 'live-game', gameId } })));
+}
+
+async function createLiveGame(sub, claims) {
+  const profile = await getProfile(sub);
+  const username = profile?.username || claims.preferred_username || claims.email || 'Player';
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const id = randomUUID();
+    const code = String(randomInt(0, 1000000)).padStart(6, '0');
+    const now = new Date().toISOString();
+    const state = { id, code, status: 'WAITING', hostUserId: sub, hostUsername: username, guestUserId: null, guestUsername: null, currentUserId: sub, round: 1, dice: [1, 1, 1, 1, 1], held: [], rollsLeft: 3, hasRolled: false, selectedCategory: null, hostScores: [], guestScores: [], winnerUserId: null, endedByUserId: null, createdAt: now, updatedAt: now };
+    try {
+      await db.send(new TransactWriteItemsCommand({ TransactItems: [
+        { Put: { TableName: table, Item: { pk: s(liveGameKey(id)), state: s(JSON.stringify(state)), version: { N: '1' }, expiresAt: { N: String(Math.floor(Date.now() / 1000) + 7 * 86400) } }, ConditionExpression: 'attribute_not_exists(pk)' } },
+        { Put: { TableName: table, Item: { pk: s(liveCodeKey(code)), gameId: s(id), expiresAt: { N: String(Math.floor(Date.now() / 1000) + 24 * 3600) } }, ConditionExpression: 'attribute_not_exists(pk)' } },
+      ] }));
+      return liveResponse(state);
+    } catch (error) {
+      if (error.name !== 'TransactionCanceledException') throw error;
+    }
+  }
+  throw new Error('Unable to reserve a game code. Please try again.');
+}
+
+async function joinLiveGame(sub, claims, rawCode) {
+  const code = clean(rawCode, 6);
+  if (!/^\d{6}$/.test(code)) throw new Error('Enter the six-digit game code.');
+  const mapping = await db.send(new GetItemCommand({ TableName: table, Key: { pk: s(liveCodeKey(code)) }, ConsistentRead: true }));
+  const id = mapping.Item?.gameId?.S;
+  if (!id) throw new Error('That game code was not found or has expired.');
+  const current = await readLiveGame(id);
+  if (!current.state || current.state.status !== 'WAITING') throw new Error('That game is no longer waiting for a player.');
+  if (current.state.hostUserId === sub) throw new Error('Share this code with another signed-in player.');
+  const profile = await getProfile(sub);
+  const next = await saveLiveGame({ ...current.state, status: 'ACTIVE', guestUserId: sub, guestUsername: profile?.username || claims.preferred_username || claims.email || 'Player', currentUserId: current.state.hostUserId }, current.version);
+  await notifyLivePlayer(next.hostUserId, `${next.guestUsername} joined your game`, 'Your first turn is ready.', next.id);
+  return liveResponse(next);
+}
+
+async function getLiveGameForUser(sub, id) {
+  const current = await readLiveGame(clean(id, 80));
+  assertLiveParticipant(current.state, sub);
+  return liveResponse(current.state);
+}
+
+async function listLiveGames(sub) {
+  const items = await scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('LIVE#') }, ProjectionExpression: '#state', ExpressionAttributeNames: { '#state': 'state' } });
+  return items.map(parseLiveItem).filter((state) => state && (state.hostUserId === sub || state.guestUserId === sub) && ['WAITING', 'ACTIVE'].includes(state.status)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(liveResponse);
+}
+
+async function abandonLiveGamesForUser(sub) {
+  const items = await scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('LIVE#') }, ProjectionExpression: 'pk, #state, version', ExpressionAttributeNames: { '#state': 'state' } });
+  const active = items.filter((item) => {
+    const state = parseLiveItem(item);
+    return state && (state.hostUserId === sub || state.guestUserId === sub) && ['WAITING', 'ACTIVE'].includes(state.status);
+  });
+  await Promise.all(active.map(async (item) => {
+    const state = parseLiveItem(item);
+    try {
+      const next = await saveLiveGame({ ...state, status: 'ABANDONED', endedByUserId: sub }, Number(item.version?.N ?? 0));
+      const opponentId = sub === next.hostUserId ? next.guestUserId : next.hostUserId;
+      await notifyLivePlayer(opponentId, 'Remote game ended', `${sub === next.hostUserId ? next.hostUsername : next.guestUsername} left the game.`, next.id);
+    } catch (error) {
+      if (error.message !== 'The game changed on the other device. Please try again.') throw error;
+    }
+  }));
+}
+
+async function updateLiveGame(sub, id, rawAction) {
+  let action;
+  try { action = typeof rawAction === 'string' ? JSON.parse(rawAction) : rawAction; } catch { throw new Error('Invalid game action.'); }
+  const current = await readLiveGame(clean(id, 80));
+  const state = current.state;
+  assertLiveParticipant(state, sub);
+  if (action?.type === 'LEAVE') {
+    if (!['WAITING', 'ACTIVE'].includes(state.status)) return liveResponse(state);
+    const next = await saveLiveGame({ ...state, status: 'ABANDONED', endedByUserId: sub }, current.version);
+    const opponentId = sub === next.hostUserId ? next.guestUserId : next.hostUserId;
+    await notifyLivePlayer(opponentId, 'Remote game ended', `${sub === next.hostUserId ? next.hostUsername : next.guestUsername} left the game.`, next.id);
+    return liveResponse(next);
+  }
+  if (state.status !== 'ACTIVE') throw new Error('The game is not active yet.');
+  if (state.currentUserId !== sub) throw new Error('Wait for your opponent to finish their turn.');
+  const scoresKey = sub === state.hostUserId ? 'hostScores' : 'guestScores';
+  const scores = state[scoresKey];
+  let next = { ...state };
+  if (action?.type === 'ROLL') {
+    if (state.rollsLeft < 1) throw new Error('No rolls remain this turn.');
+    const held = new Set(state.held);
+    next.dice = state.dice.map((die, index) => held.has(index) ? die : randomInt(1, 7));
+    next.rollsLeft = state.rollsLeft - 1; next.hasRolled = true; next.selectedCategory = null;
+  } else if (action?.type === 'TOGGLE_HOLD') {
+    const index = Number(action.index);
+    if (!state.hasRolled || !Number.isInteger(index) || index < 0 || index > 4) throw new Error('That die cannot be held.');
+    const held = new Set(state.held); held.has(index) ? held.delete(index) : held.add(index); next.held = [...held].sort();
+  } else if (action?.type === 'SELECT_CATEGORY') {
+    const category = clean(action.category, 30);
+    if (!state.hasRolled || !liveCategoryEligible(category, state.dice, scores)) throw new Error('That category is not available.');
+    next.selectedCategory = category;
+  } else if (action?.type === 'LOCK_CATEGORY') {
+    const category = clean(action.category || state.selectedCategory, 30);
+    if (!state.hasRolled || !category) throw new Error('Choose a category first.');
+    const entry = { category, score: liveScoreCategory(category, state.dice, scores), dice: [...state.dice], yahtzeeBonus: liveBonus(scores, state.dice) };
+    next[scoresKey] = [...scores, entry];
+    const complete = next[scoresKey].length === 13 && (sub === state.hostUserId ? next.guestScores.length === 13 : next.hostScores.length === 13);
+    if (complete) {
+      const hostTotal = liveTotal(next.hostScores); const guestTotal = liveTotal(next.guestScores);
+      next.status = 'COMPLETED'; next.winnerUserId = hostTotal === guestTotal ? null : hostTotal > guestTotal ? next.hostUserId : next.guestUserId;
+    } else {
+      next.currentUserId = sub === state.hostUserId ? state.guestUserId : state.hostUserId;
+      next.round = Math.min(13, Math.min(next.hostScores.length, next.guestScores.length) + 1);
+      next = newLiveTurn(next);
+    }
+  } else throw new Error('Unsupported game action.');
+  const saved = await saveLiveGame(next, current.version);
+  if (action.type === 'LOCK_CATEGORY' && saved.status === 'ACTIVE') {
+    const actor = sub === saved.hostUserId ? saved.hostUsername : saved.guestUsername;
+    await notifyLivePlayer(saved.currentUserId, 'Your turn', `${actor} finished Round ${Math.max(saved.hostScores.length, saved.guestScores.length)}.`, saved.id);
+  }
+  return liveResponse(saved);
+}
+
 export const handler = async (event) => {
   if (event?.source === 'yahtzee.account-cleanup') return await cleanupUnconfirmedUsers();
   if (event?.source === 'yahtzee.daily-winner-notifications') return await sendDailyWinnerNotifications();
@@ -456,6 +664,11 @@ export const handler = async (event) => {
   const sub = claims?.sub;
   if (!sub) throw new Error('Authentication required');
   if (field === 'adminDashboard') return await adminDashboard(claims);
+  if (field === 'createLiveGame') return await createLiveGame(sub, claims);
+  if (field === 'joinLiveGame') return await joinLiveGame(sub, claims, event.args.code);
+  if (field === 'liveGame') return await getLiveGameForUser(sub, event.args.gameId);
+  if (field === 'myLiveGames') return await listLiveGames(sub);
+  if (field === 'updateLiveGame') return await updateLiveGame(sub, event.args.gameId, event.args.action);
   if (field === 'sendAdminNotification') return await sendAdminNotification(claims, event.args ?? {});
   if (field === 'submitDailyRoundProgress') {
     return await submitDailyRoundProgress(sub, event.args.challengeDate, event.args.round, event.args.score);
@@ -476,6 +689,7 @@ export const handler = async (event) => {
   }
   if (field === 'deleteMyProfile') {
     const current = await getProfile(sub);
+    await abandonLiveGamesForUser(sub);
     await deleteScores(sub);
     await deleteGameResults(sub);
     await deleteDailyProgress(sub);
