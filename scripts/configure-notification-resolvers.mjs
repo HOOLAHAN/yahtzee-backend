@@ -12,6 +12,7 @@ const resolvers = [
   { type: 'Mutation', field: 'updateMyPushNotifications' },
   { type: 'Mutation', field: 'sendAdminNotification' },
   { type: 'Mutation', field: 'createLiveGame' },
+  { type: 'Mutation', field: 'challengeLiveGame' },
   { type: 'Mutation', field: 'joinLiveGame' },
   { type: 'Mutation', field: 'updateLiveGame' },
   { type: 'Query', field: 'liveGame' },

@@ -1,8 +1,8 @@
 {
     "AppSyncApiName": "yahtzee",
-    "AuthCognitoUserPoolId": "eu-west-2_fktkjskrl",
+    "AuthCognitoUserPoolId": "eu-west-2_e3QMax7lJ",
     "DynamoDBBillingMode": "PAY_PER_REQUEST",
     "DynamoDBEnableServerSideEncryption": false,
-    "S3DeploymentBucket": "amplify-yahtzee-dev-132249-deployment",
-    "S3DeploymentRootKey": "amplify-appsync-files/e7b0b92bf8d4d9cc16d5d15ce8e09e220a303f55"
+    "S3DeploymentBucket": "amplify-yahtzee-sandbox-87226-deployment",
+    "S3DeploymentRootKey": "amplify-appsync-files/8ddf60bc9494d49eaa0b98aa5fdc3d1f6d7ec622"
 }

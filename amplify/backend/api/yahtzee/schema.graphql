@@ -80,6 +80,7 @@ type Mutation {
   sendAdminNotification(title: String!, body: String!, userIds: [ID!]): AdminNotificationResult! @aws_cognito_user_pools
   deleteMyProfile: Boolean! @aws_cognito_user_pools
   createLiveGame: LiveGame! @aws_cognito_user_pools
+  challengeLiveGame(userId: ID!): LiveGame! @aws_cognito_user_pools
   joinLiveGame(code: String!): LiveGame! @aws_cognito_user_pools
   updateLiveGame(gameId: ID!, action: AWSJSON!): LiveGame! @aws_cognito_user_pools
 }
@@ -94,7 +95,7 @@ type Query {
 
 type Subscription {
   onLiveGameChanged(id: ID!): LiveGame
-    @aws_subscribe(mutations: ["joinLiveGame", "updateLiveGame"])
+    @aws_subscribe(mutations: ["joinLiveGame", "updateLiveGame", "challengeLiveGame"])
     @aws_cognito_user_pools
 }
 

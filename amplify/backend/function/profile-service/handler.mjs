@@ -593,6 +593,23 @@ async function createLiveGame(sub, claims) {
   throw new Error('Unable to reserve a game code. Please try again.');
 }
 
+async function challengeLiveGame(sub, claims, rawUserId) {
+  const guestUserId = clean(rawUserId, 80);
+  if (!guestUserId || guestUserId === sub) throw new Error('Choose another player to challenge.');
+  const [hostProfile, guestProfile] = await Promise.all([getProfile(sub), getProfile(guestUserId)]);
+  if (!guestProfile) throw new Error('That player is no longer available.');
+  const existingItems = await scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('LIVE#') }, ProjectionExpression: '#state', ExpressionAttributeNames: { '#state': 'state' } });
+  const existing = existingItems.map(parseLiveItem).find((state) => state?.status === 'INVITED' && state.hostUserId === sub && state.guestUserId === guestUserId && Date.now() - new Date(state.createdAt).getTime() <= 24 * 60 * 60 * 1000);
+  if (existing) return liveResponse(existing);
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  const hostUsername = hostProfile?.username || claims.preferred_username || claims.email || 'Player';
+  const state = { id, code: '', status: 'INVITED', hostUserId: sub, hostUsername, guestUserId, guestUsername: guestProfile.username, currentUserId: sub, round: 1, dice: [1, 1, 1, 1, 1], held: [], rollsLeft: 3, hasRolled: false, selectedCategory: null, hostScores: [], guestScores: [], winnerUserId: null, endedByUserId: null, createdAt: now, updatedAt: now };
+  await db.send(new PutItemCommand({ TableName: table, Item: { pk: s(liveGameKey(id)), state: s(JSON.stringify(state)), version: { N: '1' }, expiresAt: { N: String(Math.floor(Date.now() / 1000) + 7 * 86400) } }, ConditionExpression: 'attribute_not_exists(pk)' }));
+  try { await notifyLivePlayer(guestUserId, 'Game challenge', `${hostUsername} challenged you to a Remote Game.`, id, sub); } catch { /* The in-app invitation remains available if push delivery fails. */ }
+  return liveResponse(state);
+}
+
 async function createLiveRematch(previous, requester) {
   if (previous.status !== 'COMPLETED' || !previous.guestUserId) throw new Error('This game cannot be replayed yet.');
   const existingItems = await scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('LIVE#') }, ProjectionExpression: '#state', ExpressionAttributeNames: { '#state': 'state' } });
@@ -643,14 +660,14 @@ async function getLiveGameForUser(sub, id) {
 
 async function listLiveGames(sub) {
   const items = await scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('LIVE#') }, ProjectionExpression: '#state', ExpressionAttributeNames: { '#state': 'state' } });
-  return items.map(parseLiveItem).filter((state) => state && (state.hostUserId === sub || state.guestUserId === sub) && ['WAITING', 'ACTIVE'].includes(state.status) && (state.status !== 'WAITING' || Date.now() - new Date(state.createdAt).getTime() <= 24 * 60 * 60 * 1000)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(liveResponse);
+  return items.map(parseLiveItem).filter((state) => state && (state.hostUserId === sub || state.guestUserId === sub) && ['INVITED', 'WAITING', 'ACTIVE'].includes(state.status) && (!['INVITED', 'WAITING'].includes(state.status) || Date.now() - new Date(state.createdAt).getTime() <= 24 * 60 * 60 * 1000)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(liveResponse);
 }
 
 async function abandonLiveGamesForUser(sub) {
   const items = await scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('LIVE#') }, ProjectionExpression: 'pk, #state, version', ExpressionAttributeNames: { '#state': 'state' } });
   const active = items.filter((item) => {
     const state = parseLiveItem(item);
-    return state && (state.hostUserId === sub || state.guestUserId === sub) && ['WAITING', 'ACTIVE'].includes(state.status);
+    return state && (state.hostUserId === sub || state.guestUserId === sub) && ['INVITED', 'WAITING', 'ACTIVE'].includes(state.status);
   });
   await Promise.all(active.map(async (item) => {
     const state = parseLiveItem(item);
@@ -672,9 +689,16 @@ async function updateLiveGame(sub, id, rawAction) {
   assertLiveParticipant(state, sub);
   const actionId = clean(action?.actionId, 80);
   if (actionId && (state.processedActionIds || []).includes(actionId)) return liveResponse(state);
+  if (action?.type === 'RESPOND_INVITE') {
+    if (state.status !== 'INVITED' || state.guestUserId !== sub) throw new Error('This challenge is no longer available.');
+    const accepted = Boolean(action.accept);
+    const next = await saveLiveGame({ ...state, status: accepted ? 'ACTIVE' : 'DECLINED', endedByUserId: accepted ? null : sub, processedActionIds: actionId ? [...(state.processedActionIds || []), actionId].slice(-40) : state.processedActionIds }, current.version);
+    try { await notifyLivePlayer(next.hostUserId, accepted ? 'Challenge accepted' : 'Challenge declined', `${next.guestUsername} ${accepted ? 'accepted' : 'declined'} your Remote Game challenge.`, next.id, sub); } catch { /* The response is saved even if push delivery fails. */ }
+    return liveResponse(next);
+  }
   if (action?.type === 'REMATCH') return await createLiveRematch(state, sub);
   if (action?.type === 'LEAVE') {
-    if (!['WAITING', 'ACTIVE'].includes(state.status)) return liveResponse(state);
+    if (!['INVITED', 'WAITING', 'ACTIVE'].includes(state.status)) return liveResponse(state);
     const next = await saveLiveGame({ ...state, status: 'ABANDONED', endedByUserId: sub, processedActionIds: actionId ? [...(state.processedActionIds || []), actionId].slice(-40) : state.processedActionIds }, current.version);
     const opponentId = sub === next.hostUserId ? next.guestUserId : next.hostUserId;
     await notifyLivePlayer(opponentId, 'Remote game ended', `${sub === next.hostUserId ? next.hostUsername : next.guestUsername} left the game.`, next.id, sub);
@@ -742,6 +766,7 @@ export const handler = async (event) => {
   if (!sub) throw new Error('Authentication required');
   if (field === 'adminDashboard') return await adminDashboard(claims);
   if (field === 'createLiveGame') return await createLiveGame(sub, claims);
+  if (field === 'challengeLiveGame') return await challengeLiveGame(sub, claims, event.args.userId);
   if (field === 'joinLiveGame') return await joinLiveGame(sub, claims, event.args.code);
   if (field === 'liveGame') return await getLiveGameForUser(sub, event.args.gameId);
   if (field === 'myLiveGames') return await listLiveGames(sub);
