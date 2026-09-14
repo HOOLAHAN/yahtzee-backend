@@ -584,7 +584,7 @@
               {
                 "Ref": "GameResultTable"
               },
-              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:a36e8910-ebdc-4dc3-9bba-d6f2176229ea\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
             ]
           ]
         },
@@ -679,7 +679,7 @@
               {
                 "Ref": "GameResultTable"
               },
-              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:a36e8910-ebdc-4dc3-9bba-d6f2176229ea\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
             ]
           ]
         },
@@ -777,7 +777,7 @@
               {
                 "Ref": "GameResultTable"
               },
-              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:a36e8910-ebdc-4dc3-9bba-d6f2176229ea\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
             ]
           ]
         },
@@ -929,7 +929,7 @@
               {
                 "Ref": "GameResultTable"
               },
-              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:a36e8910-ebdc-4dc3-9bba-d6f2176229ea\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
             ]
           ]
         },
@@ -1078,7 +1078,7 @@
               {
                 "Ref": "GameResultTable"
               },
-              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:a36e8910-ebdc-4dc3-9bba-d6f2176229ea\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
             ]
           ]
         },
@@ -1115,7 +1115,7 @@
               {
                 "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
               },
-              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:a36e8910-ebdc-4dc3-9bba-d6f2176229ea\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
             ]
           ]
         },
@@ -1152,7 +1152,7 @@
               {
                 "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
               },
-              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:a36e8910-ebdc-4dc3-9bba-d6f2176229ea\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
             ]
           ]
         },
@@ -1189,7 +1189,7 @@
               {
                 "Ref": "referencetotransformerrootstackGraphQLAPI20497F53ApiId"
               },
-              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:a36e8910-ebdc-4dc3-9bba-d6f2176229ea\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+              "\"))\n$util.qr($ctx.stash.put(\"connectionAttributes\", {}))\n\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
             ]
           ]
         },
@@ -1284,7 +1284,7 @@
               {
                 "Ref": "GameResultTable"
               },
-              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:a36e8910-ebdc-4dc3-9bba-d6f2176229ea\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
             ]
           ]
         },
@@ -1379,7 +1379,7 @@
               {
                 "Ref": "GameResultTable"
               },
-              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:a36e8910-ebdc-4dc3-9bba-d6f2176229ea\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
             ]
           ]
         },
@@ -1474,7 +1474,7 @@
               {
                 "Ref": "GameResultTable"
               },
-              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:a36e8910-ebdc-4dc3-9bba-d6f2176229ea\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
+              "\"))\n$util.qr($ctx.stash.put(\"identityPoolId\", \"eu-west-2:226f2aeb-1cfa-4029-9233-9066e94bb15d\"))\n$util.qr($ctx.stash.put(\"adminRoles\", []))\n$util.toJson({})"
             ]
           ]
         },

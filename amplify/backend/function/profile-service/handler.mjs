@@ -200,6 +200,18 @@ async function getProfile(sub) {
   } : null;
 }
 
+async function getProfileByUsername(rawUsername) {
+  const username = clean(rawUsername, 20);
+  if (!username) return null;
+  const lookup = await db.send(new GetItemCommand({
+    TableName: table,
+    Key: { pk: s(usernameKey(username)) },
+    ConsistentRead: true,
+  }));
+  const userId = lookup.Item?.userId?.S;
+  return userId ? await getProfile(userId) : null;
+}
+
 async function pushToExpo(messages) {
   let sentCount = 0;
   let failedCount = 0;
@@ -593,11 +605,14 @@ async function createLiveGame(sub, claims) {
   throw new Error('Unable to reserve a game code. Please try again.');
 }
 
-async function challengeLiveGame(sub, claims, rawUserId) {
-  const guestUserId = clean(rawUserId, 80);
-  if (!guestUserId || guestUserId === sub) throw new Error('Choose another player to challenge.');
-  const [hostProfile, guestProfile] = await Promise.all([getProfile(sub), getProfile(guestUserId)]);
+async function challengeLiveGame(sub, claims, rawUserId, rawUsername) {
+  const requestedUserId = clean(rawUserId, 80);
+  if (!requestedUserId) throw new Error('Choose another player to challenge.');
+  const [hostProfile, directGuestProfile] = await Promise.all([getProfile(sub), getProfile(requestedUserId)]);
+  const guestProfile = directGuestProfile || await getProfileByUsername(rawUsername);
   if (!guestProfile) throw new Error('That player is no longer available.');
+  const guestUserId = guestProfile.userId;
+  if (guestUserId === sub) throw new Error('You cannot challenge your own account.');
   const existingItems = await scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('LIVE#') }, ProjectionExpression: '#state', ExpressionAttributeNames: { '#state': 'state' } });
   const existing = existingItems.map(parseLiveItem).find((state) => state?.status === 'INVITED' && state.hostUserId === sub && state.guestUserId === guestUserId && Date.now() - new Date(state.createdAt).getTime() <= 24 * 60 * 60 * 1000);
   if (existing) return liveResponse(existing);
@@ -766,7 +781,7 @@ export const handler = async (event) => {
   if (!sub) throw new Error('Authentication required');
   if (field === 'adminDashboard') return await adminDashboard(claims);
   if (field === 'createLiveGame') return await createLiveGame(sub, claims);
-  if (field === 'challengeLiveGame') return await challengeLiveGame(sub, claims, event.args.userId);
+  if (field === 'challengeLiveGame') return await challengeLiveGame(sub, claims, event.args.userId, event.args.username);
   if (field === 'joinLiveGame') return await joinLiveGame(sub, claims, event.args.code);
   if (field === 'liveGame') return await getLiveGameForUser(sub, event.args.gameId);
   if (field === 'myLiveGames') return await listLiveGames(sub);
