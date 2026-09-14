@@ -232,6 +232,38 @@ async function notificationProfiles(userIds) {
   return profiles.filter((profile) => (!selected || selected.has(profile.userId?.S)) && expoTokenPattern.test(profile.expoPushToken?.S ?? ''));
 }
 
+async function notifyAdminsOfNewUser(username) {
+  try {
+    const adminUsers = [];
+    let NextToken;
+    do {
+      const result = await cognito.send(new ListUsersInGroupCommand({ UserPoolId: pool, GroupName: 'Admin', Limit: 60, NextToken }));
+      adminUsers.push(...(result.Users ?? []));
+      NextToken = result.NextToken;
+    } while (NextToken);
+    const adminIds = adminUsers
+      .map((user) => user.Attributes?.find((attribute) => attribute.Name === 'sub')?.Value)
+      .filter(Boolean);
+    if (!adminIds.length) {
+      console.info('New-user admin notification skipped because the Admin group is empty', { username });
+      return;
+    }
+    const profiles = await notificationProfiles(adminIds);
+    const delivered = await pushToExpo(profiles.map((profile) => ({
+      to: profile.expoPushToken.S,
+      sound: 'default',
+      title: 'New player signed up',
+      body: `${username} has joined Yahtzee Hub.`,
+      data: { destination: 'admin', notificationType: 'new-user' },
+    })));
+    console.info('New-user admin notification complete', { username, audienceCount: profiles.length, ...delivered });
+  } catch (error) {
+    // Profile creation has already succeeded. Notification delivery must never
+    // make a new account appear to have failed or cause the client to retry it.
+    console.error('New-user admin notification failed', { username, message: error instanceof Error ? error.message : String(error) });
+  }
+}
+
 async function sendAdminNotification(claims, args) {
   if (!isAdmin(claims)) throw new Error('Admin access required');
   const title = clean(args.title, 60);
@@ -826,5 +858,6 @@ export const handler = async (event) => {
   }));
 
   if (!current || current.username !== username) await Promise.all([renameScores(sub, username), renameGameResults(sub, username)]);
+  if (!current) await notifyAdminsOfNewUser(username);
   return { userId: sub, username, firstName, lastName, scoreSuggestionsEnabled: current?.scoreSuggestionsEnabled ?? true, dailyReminderEnabled: current?.dailyReminderEnabled ?? false, dailyReminderHour: current?.dailyReminderHour ?? 19, pushNotificationsEnabled: current?.pushNotificationsEnabled ?? false, expoPushToken: current?.expoPushToken ?? '', role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
 };
