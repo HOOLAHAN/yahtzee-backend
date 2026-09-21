@@ -7,7 +7,7 @@ import { createHash, randomUUID } from 'node:crypto';
 const { CognitoIdentityProviderClient, ListUsersCommand } = cognitoSdk;
 const { DynamoDBClient } = dynamoSdk;
 const { DynamoDBDocumentClient, DeleteCommand, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } = dynamoDocumentSdk;
-const { SESv2Client, PutContactCommand, SendEmailCommand } = sesSdk;
+const { CreateContactCommand, SESv2Client, SendEmailCommand, UpdateContactCommand } = sesSdk;
 
 const region = process.env.AWS_REGION || 'eu-west-2';
 const cognito = new CognitoIdentityProviderClient({ region });
@@ -64,6 +64,21 @@ async function myPreference(event) {
   return publicPreference(await getState(sub));
 }
 
+async function upsertContact({ email, subscriptionStatus, attributes }) {
+  const input = {
+    ContactListName: contactList,
+    EmailAddress: email,
+    TopicPreferences: [{ TopicName: topicName, SubscriptionStatus: subscriptionStatus }],
+    AttributesData: JSON.stringify(attributes),
+  };
+  try {
+    await ses.send(new CreateContactCommand(input));
+  } catch (error) {
+    if (error?.name !== 'AlreadyExistsException') throw error;
+    await ses.send(new UpdateContactCommand(input));
+  }
+}
+
 async function updatePreference(event) {
   const { sub, email } = caller(event);
   const enabled = event.arguments?.enabled === true;
@@ -72,12 +87,11 @@ async function updatePreference(event) {
   if (!['WEB', 'IOS', 'ANDROID'].includes(source)) throw new Error('Unsupported consent source.');
   const timestamp = nowIso();
 
-  await ses.send(new PutContactCommand({
-    ContactListName: contactList,
-    EmailAddress: email,
-    TopicPreferences: [{ TopicName: topicName, SubscriptionStatus: enabled ? 'OPT_IN' : 'OPT_OUT' }],
-    AttributesData: JSON.stringify({ userId: sub, consentVersion: version, source }),
-  }));
+  await upsertContact({
+    email,
+    subscriptionStatus: enabled ? 'OPT_IN' : 'OPT_OUT',
+    attributes: { userId: sub, consentVersion: version, source },
+  });
 
   const result = await db.send(new UpdateCommand({
     TableName: tableName,
@@ -116,12 +130,11 @@ async function recordActivity(event) {
 
 async function deleteLifecycleData(event) {
   const { sub, email } = caller(event);
-  await ses.send(new PutContactCommand({
-    ContactListName: contactList,
-    EmailAddress: email,
-    TopicPreferences: [{ TopicName: topicName, SubscriptionStatus: 'OPT_OUT' }],
-    AttributesData: JSON.stringify({ deletedAccount: true }),
-  })).catch((error) => console.warn('Unable to update SES contact during account deletion', error));
+  await upsertContact({
+    email,
+    subscriptionStatus: 'OPT_OUT',
+    attributes: { deletedAccount: true },
+  }).catch((error) => console.warn('Unable to update SES contact during account deletion', error));
   let ExclusiveStartKey;
   do {
     const page = await db.send(new QueryCommand({ TableName: tableName, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': userPk(sub) }, ExclusiveStartKey }));

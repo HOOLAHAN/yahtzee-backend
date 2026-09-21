@@ -82,7 +82,7 @@ Resources:
                 Action: cognito-idp:ListUsers
                 Resource: !Sub arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}
               - Effect: Allow
-                Action: [ses:SendEmail, ses:SendTemplatedEmail, ses:PutContact]
+                Action: [ses:SendEmail, ses:SendTemplatedEmail, ses:CreateContact, ses:UpdateContact]
                 Resource: '*'
 
   LifecycleFunction:
