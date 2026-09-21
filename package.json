@@ -14,5 +14,11 @@
     "configure:cleanup:sandbox": "node scripts/configure-account-cleanup.mjs sandbox",
     "seed:leaderboards:sandbox": "node scripts/seed-sandbox-leaderboards.mjs",
     "configure:cleanup:production": "node scripts/configure-account-cleanup.mjs production"
+    ,"deploy:lifecycle:sandbox": "node scripts/deploy-lifecycle-email.mjs sandbox"
+    ,"deploy:lifecycle:production": "node scripts/deploy-lifecycle-email.mjs production"
+    ,"configure:lifecycle:sandbox": "node scripts/configure-lifecycle-resolvers.mjs sandbox"
+    ,"configure:lifecycle:production": "node scripts/configure-lifecycle-resolvers.mjs production"
+    ,"configure:lifecycle:templates:sandbox": "node scripts/configure-lifecycle-email-templates.mjs sandbox"
+    ,"configure:lifecycle:templates:production": "node scripts/configure-lifecycle-email-templates.mjs production"
   }
 }

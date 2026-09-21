@@ -77,6 +77,9 @@ type Mutation {
   updateMyProfile(username: String!, firstName: String!, lastName: String!): UserProfile @aws_cognito_user_pools
   updateMyPreferences(scoreSuggestionsEnabled: Boolean!, dailyReminderEnabled: Boolean!, dailyReminderHour: Int!): UserProfile @aws_cognito_user_pools
   updateMyPushNotifications(enabled: Boolean!, expoPushToken: String): UserProfile @aws_cognito_user_pools
+  updateMyLifecycleEmailPreference(enabled: Boolean!, consentVersion: String!, source: ClientPlatform!): LifecycleEmailPreference! @aws_cognito_user_pools
+  recordClientActivity(platform: ClientPlatform!): LifecycleEmailPreference! @aws_cognito_user_pools
+  deleteMyLifecycleEmailData: Boolean! @aws_cognito_user_pools
   sendAdminNotification(title: String!, body: String!, userIds: [ID!]): AdminNotificationResult! @aws_cognito_user_pools
   deleteMyProfile: Boolean! @aws_cognito_user_pools
   createLiveGame: LiveGame! @aws_cognito_user_pools
@@ -87,10 +90,29 @@ type Mutation {
 
 type Query {
   myProfile: UserProfile @aws_cognito_user_pools
+  myLifecycleEmailPreference: LifecycleEmailPreference! @aws_cognito_user_pools
   usernameAvailable(username: String!): Boolean! @aws_api_key
   adminDashboard: AdminDashboard! @aws_cognito_user_pools
   liveGame(gameId: ID!): LiveGame! @aws_cognito_user_pools
   myLiveGames: [LiveGame!]! @aws_cognito_user_pools
+}
+
+enum ClientPlatform {
+  WEB
+  IOS
+  ANDROID
+}
+
+type LifecycleEmailPreference @aws_cognito_user_pools {
+  enabled: Boolean!
+  consentedAt: AWSDateTime
+  consentVersion: String
+  consentSource: ClientPlatform
+  unsubscribedAt: AWSDateTime
+  firstWebSeenAt: AWSDateTime
+  lastWebSeenAt: AWSDateTime
+  firstMobileSeenAt: AWSDateTime
+  lastMobileSeenAt: AWSDateTime
 }
 
 type Subscription {

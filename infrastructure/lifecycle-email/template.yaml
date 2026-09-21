@@ -1,0 +1,192 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Yahtzee Hub consent-first lifecycle email service
+
+Parameters:
+  Stage:
+    Type: String
+    AllowedValues: [sandbox, production]
+  UserPoolId:
+    Type: String
+  GameResultTable:
+    Type: String
+  AppSyncApiId:
+    Type: String
+  DryRun:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'true'
+  EnableFirstGame:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+  EnableDownloadApp:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+  EnableInactivePlayer:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
+  FromEmail:
+    Type: String
+    Default: Yahtzee <play@yahtzee.ijrhservices.co.uk>
+  ReplyToEmail:
+    Type: String
+    Default: accounts@yahtzee.ijrhservices.co.uk
+
+Resources:
+  StateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub YahtzeeLifecycleEmailState-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  LifecycleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub YahtzeeLifecycleEmailRole-${Stage}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: lambda.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LifecycleEmail
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:Query, dynamodb:Scan]
+                Resource:
+                  - !GetAtt StateTable.Arn
+                  - !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${GameResultTable}
+              - Effect: Allow
+                Action: cognito-idp:ListUsers
+                Resource: !Sub arn:${AWS::Partition}:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${UserPoolId}
+              - Effect: Allow
+                Action: [ses:SendEmail, ses:SendTemplatedEmail, ses:PutContact]
+                Resource: '*'
+
+  LifecycleFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub YahtzeeLifecycleService-${Stage}
+      Runtime: nodejs22.x
+      Handler: handler.handler
+      Role: !GetAtt LifecycleRole.Arn
+      Timeout: 60
+      MemorySize: 256
+      Code:
+        ZipFile: |
+          export const handler = async () => { throw new Error('Deploy the packaged lifecycle handler.'); };
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
+          STATE_TABLE: !Ref StateTable
+          GAME_RESULT_TABLE: !Ref GameResultTable
+          USER_POOL_ID: !Ref UserPoolId
+          DRY_RUN: !Ref DryRun
+          ENABLE_FIRST_GAME: !Ref EnableFirstGame
+          ENABLE_DOWNLOAD_APP: !Ref EnableDownloadApp
+          ENABLE_INACTIVE_PLAYER: !Ref EnableInactivePlayer
+          FROM_EMAIL: !Ref FromEmail
+          REPLY_TO_EMAIL: !Ref ReplyToEmail
+          CONFIGURATION_SET: yahtzee-marketing
+          CONTACT_LIST_NAME: yahtzee-marketing
+          TOPIC_NAME: lifecycle-emails
+          CONSENT_VERSION: '2026-09-21'
+          APP_STORE_URL: https://apps.apple.com/gb/app/yahtzee-hub/id6794910138
+          FIRST_GAME_TEMPLATE: yahtzee-first-game
+          DOWNLOAD_APP_TEMPLATE: yahtzee-download-app
+          INACTIVE_PLAYER_TEMPLATE: yahtzee-inactive-player
+          FIRST_GAME_DELAY_DAYS: '1'
+          DOWNLOAD_APP_DELAY_DAYS: '7'
+          INACTIVE_DELAY_DAYS: '30'
+          INACTIVE_COOLDOWN_DAYS: '90'
+
+  EvaluatorRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub YahtzeeLifecycleEvaluation-${Stage}
+      Description: Daily consent-first lifecycle campaign evaluation
+      ScheduleExpression: cron(15 10 * * ? *)
+      State: ENABLED
+      Targets:
+        - Id: lifecycle-evaluator
+          Arn: !GetAtt LifecycleFunction.Arn
+          Input: '{"source":"yahtzee.lifecycle.evaluate"}'
+
+  EvaluatorPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LifecycleFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt EvaluatorRule.Arn
+
+  SesEventsRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub YahtzeeLifecycleSesEvents-${Stage}
+      Description: Persist lifecycle delivery, click and suppression events
+      EventPattern:
+        source: [aws.ses]
+      State: ENABLED
+      Targets:
+        - Id: lifecycle-ses-events
+          Arn: !GetAtt LifecycleFunction.Arn
+
+  SesEventsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref LifecycleFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SesEventsRule.Arn
+
+  AppSyncInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub YahtzeeLifecycleAppSyncRole-${Stage}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: appsync.amazonaws.com }
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeLifecycle
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt LifecycleFunction.Arn
+
+Outputs:
+  FunctionName:
+    Value: !Ref LifecycleFunction
+  FunctionArn:
+    Value: !GetAtt LifecycleFunction.Arn
+  StateTableName:
+    Value: !Ref StateTable
+  AppSyncRoleArn:
+    Value: !GetAtt AppSyncInvokeRole.Arn
