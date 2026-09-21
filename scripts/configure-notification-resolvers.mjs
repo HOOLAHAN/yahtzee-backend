@@ -11,6 +11,7 @@ const resolvers = [
   { type: 'Query', field: 'adminDashboard' },
   { type: 'Mutation', field: 'updateMyPushNotifications' },
   { type: 'Mutation', field: 'sendAdminNotification' },
+  { type: 'Mutation', field: 'recordGameLifecycleEvent' },
   { type: 'Mutation', field: 'createLiveGame' },
   { type: 'Mutation', field: 'challengeLiveGame' },
   { type: 'Mutation', field: 'joinLiveGame' },

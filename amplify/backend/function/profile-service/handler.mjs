@@ -19,6 +19,9 @@ const liveGameKey = (id) => `LIVE#${id}`;
 const liveCodeKey = (code) => `LIVE_CODE#${code}`;
 const liveCategories = ['Ones', 'Twos', 'Threes', 'Fours', 'Fives', 'Sixes', 'Three of a Kind', 'Four of a Kind', 'Full House', 'Small Straight', 'Large Straight', 'Yahtzee', 'Chance'];
 const liveUpperCategories = liveCategories.slice(0, 6);
+const lifecycleActions = new Set(['STARTED', 'RESET', 'MODE_SWITCH', 'REMOTE_EXIT', 'COMPLETED']);
+const lifecycleModes = new Set(['SOLO', 'DAILY', 'COMPUTER', 'PASS', 'REAL', 'REMOTE']);
+const lifecyclePlatforms = new Set(['WEB', 'IOS', 'ANDROID']);
 const isAdmin = (claims) => {
   const groups = claims?.['cognito:groups'];
   return Array.isArray(groups) ? groups.includes('Admin') : String(groups ?? '').split(',').some((group) => group.trim() === 'Admin');
@@ -59,11 +62,12 @@ async function listGroupUsernames(GroupName) {
 
 async function adminDashboard(claims) {
   if (!isAdmin(claims)) throw new Error('Admin access required');
-  const [profiles, results, cognitoUsers, notificationItems, adminUsernames] = await Promise.all([
+  const [profiles, results, cognitoUsers, notificationItems, lifecycleItems, adminUsernames] = await Promise.all([
     scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('USER#') } }),
     scanAll(gameResultTable, { ProjectionExpression: 'id, userId, username, #mode, score, completedAt, yahtzeeCount, earnedUpperBonus, #session', ExpressionAttributeNames: { '#mode': 'mode', '#session': 'session' } }),
     listAllUsers(),
     scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('NOTIFICATION#CUSTOM#') } }),
+    scanAll(table, { FilterExpression: 'begins_with(pk, :prefix)', ExpressionAttributeValues: { ':prefix': s('GAME_EVENT#') } }),
     listGroupUsernames('Admin'),
   ]);
   const now = new Date();
@@ -73,6 +77,33 @@ async function adminDashboard(claims) {
   const completedAt = (item) => new Date(item.completedAt?.S ?? 0);
   const sessionFor = (item) => { try { let value = item.session?.S; for (let pass = 0; pass < 2 && typeof value === 'string'; pass += 1) value = JSON.parse(value); return value && typeof value === 'object' ? value : {}; } catch { return {}; } };
   const remoteResults = results.filter((item) => item.mode?.S === 'REMOTE');
+  const lifecycleEvents = lifecycleItems.map((item) => ({
+    gameId: item.gameId?.S ?? '', userId: item.userId?.S ?? '', username: item.username?.S ?? '',
+    action: item.action?.S ?? '', mode: item.mode?.S ?? '', round: Number(item.round?.N ?? 0),
+    score: Number(item.score?.N ?? 0), categoriesFilled: Number(item.categoriesFilled?.N ?? 0),
+    platform: item.platform?.S ?? '', occurredAt: item.occurredAt?.S ?? '',
+  })).filter((item) => item.gameId);
+  const lifecycleByGame = new Map();
+  for (const item of lifecycleEvents) {
+    const game = lifecycleByGame.get(item.gameId) ?? [];
+    game.push(item);
+    lifecycleByGame.set(item.gameId, game);
+  }
+  const terminalActions = new Set(['RESET', 'MODE_SWITCH', 'REMOTE_EXIT', 'COMPLETED']);
+  const starts = lifecycleEvents.filter((item) => item.action === 'STARTED');
+  const explicitAbandons = lifecycleEvents.filter((item) => ['RESET', 'MODE_SWITCH', 'REMOTE_EXIT'].includes(item.action));
+  const staleCutoff = now.getTime() - 24 * 60 * 60 * 1000;
+  const staleGames = [...lifecycleByGame.values()].filter((events) => {
+    const started = events.find((item) => item.action === 'STARTED');
+    return started && Date.parse(started.occurredAt) < staleCutoff && !events.some((item) => terminalActions.has(item.action));
+  });
+  const completedLifecycleGames = [...lifecycleByGame.values()].filter((events) => events.some((item) => item.action === 'COMPLETED')).length;
+  const abandonmentByMode = [...lifecycleModes].map((mode) => {
+    const modeStarts = starts.filter((item) => item.mode === mode).length;
+    const abandoned = explicitAbandons.filter((item) => item.mode === mode).length;
+    return { mode, starts: modeStarts, abandoned, rate: modeStarts ? Math.round(abandoned / modeStarts * 100) : 0 };
+  }).filter((item) => item.starts || item.abandoned);
+  const recentAbandonments = [...explicitAbandons].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt)).slice(0, 50);
   const remoteMatchIds = new Set(remoteResults.map((item) => sessionFor(item).liveGameId).filter(Boolean));
   const recent7 = results.filter((item) => completedAt(item) >= last7);
   const recent30 = results.filter((item) => completedAt(item) >= last30);
@@ -115,6 +146,8 @@ async function adminDashboard(claims) {
       dailyGames: games.filter((game) => game.mode?.S === 'DAILY').length,
       remoteGames: games.filter((game) => game.mode?.S === 'REMOTE').length,
       remoteWins: games.filter((game) => game.mode?.S === 'REMOTE' && sessionFor(game).outcome === 'WIN').length,
+      abandonedGames: explicitAbandons.filter((event) => event.userId === userId).length,
+      resetGames: explicitAbandons.filter((event) => event.userId === userId && event.action === 'RESET').length,
       bestScore: scores.length ? Math.max(...scores) : null,
       averageScore: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
       pushNotificationsEnabled: profile?.pushNotificationsEnabled?.BOOL === true && expoTokenPattern.test(profile?.expoPushToken?.S ?? ''),
@@ -146,6 +179,16 @@ async function adminDashboard(claims) {
     averageScore: results.length ? Math.round(results.reduce((sum, item) => sum + Number(item.score?.N ?? 0), 0) / results.length) : 0,
     yahtzeesRolled: results.reduce((sum, item) => sum + Number(item.yahtzeeCount?.N ?? 0), 0),
     upperBonusesEarned: results.filter((item) => item.earnedUpperBonus?.BOOL).length,
+    gameStarts: starts.length,
+    abandonedGames: explicitAbandons.length,
+    resetGames: explicitAbandons.filter((item) => item.action === 'RESET').length,
+    modeSwitchAbandons: explicitAbandons.filter((item) => item.action === 'MODE_SWITCH').length,
+    remoteExits: explicitAbandons.filter((item) => item.action === 'REMOTE_EXIT').length,
+    staleGames: staleGames.length,
+    gameCompletionRate: starts.length ? Math.round(completedLifecycleGames / starts.length * 100) : 0,
+    averageAbandonRound: explicitAbandons.length ? Math.round(explicitAbandons.reduce((sum, item) => sum + item.round, 0) / explicitAbandons.length) : 0,
+    abandonmentByMode,
+    recentAbandonments,
     generatedAt: now.toISOString(),
     dailyActivity,
     users,
@@ -787,6 +830,24 @@ export const handler = async (event) => {
   if (field === 'myLiveGames') return await listLiveGames(sub);
   if (field === 'updateLiveGame') return await updateLiveGame(sub, event.args.gameId, event.args.action);
   if (field === 'sendAdminNotification') return await sendAdminNotification(claims, event.args ?? {});
+  if (field === 'recordGameLifecycleEvent') {
+    const gameId = clean(event.args.gameId, 100);
+    const mode = clean(event.args.mode, 20).toUpperCase();
+    const action = clean(event.args.action, 24).toUpperCase();
+    const platform = clean(event.args.platform, 12).toUpperCase();
+    if (!gameId || !lifecycleModes.has(mode) || !lifecycleActions.has(action) || !lifecyclePlatforms.has(platform)) throw new Error('Invalid game lifecycle event.');
+    const round = Math.max(1, Math.min(13, Number(event.args.round) || 1));
+    const score = Math.max(0, Math.min(2000, Number(event.args.score) || 0));
+    const categoriesFilled = Math.max(0, Math.min(26, Number(event.args.categoriesFilled) || 0));
+    const profile = await getProfile(sub);
+    await db.send(new PutItemCommand({ TableName: table, Item: {
+      pk: s(`GAME_EVENT#${gameId}#${action}`), gameId: s(gameId), userId: s(sub),
+      username: s(profile?.username || claims.preferred_username || claims.email || 'Player'),
+      action: s(action), mode: s(mode), round: { N: String(round) }, score: { N: String(score) },
+      categoriesFilled: { N: String(categoriesFilled) }, platform: s(platform), occurredAt: s(new Date().toISOString()),
+    } }));
+    return true;
+  }
   if (field === 'submitDailyRoundProgress') {
     return await submitDailyRoundProgress(sub, event.args.challengeDate, event.args.round, event.args.score);
   }
