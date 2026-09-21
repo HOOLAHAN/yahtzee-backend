@@ -71,6 +71,7 @@ type Mutation {
   updateMyPushNotifications(enabled: Boolean!, expoPushToken: String): UserProfile @aws_cognito_user_pools
   updateMyLifecycleEmailPreference(enabled: Boolean!, consentVersion: String!, source: ClientPlatform!): LifecycleEmailPreference! @aws_cognito_user_pools
   recordClientActivity(platform: ClientPlatform!): LifecycleEmailPreference! @aws_cognito_user_pools
+  recordGameLifecycleEvent(gameId: ID!, mode: GameMode!, action: GameLifecycleAction!, round: Int!, score: Int!, categoriesFilled: Int!, platform: ClientPlatform!): Boolean! @aws_cognito_user_pools
   deleteMyLifecycleEmailData: Boolean! @aws_cognito_user_pools
   sendAdminNotification(title: String!, body: String!, userIds: [ID!]): AdminNotificationResult! @aws_cognito_user_pools
   deleteMyProfile: Boolean! @aws_cognito_user_pools
@@ -106,6 +107,14 @@ enum ClientPlatform {
   WEB
   IOS
   ANDROID
+}
+
+enum GameLifecycleAction {
+  STARTED
+  RESET
+  MODE_SWITCH
+  REMOTE_EXIT
+  COMPLETED
 }
 
 type LifecycleEmailPreference @aws_cognito_user_pools {
@@ -188,6 +197,16 @@ type AdminDashboard @aws_cognito_user_pools {
   averageScore: Int!
   yahtzeesRolled: Int!
   upperBonusesEarned: Int!
+  gameStarts: Int!
+  abandonedGames: Int!
+  resetGames: Int!
+  modeSwitchAbandons: Int!
+  remoteExits: Int!
+  staleGames: Int!
+  gameCompletionRate: Int!
+  averageAbandonRound: Int!
+  abandonmentByMode: AWSJSON!
+  recentAbandonments: AWSJSON!
   generatedAt: AWSDateTime!
   dailyActivity: AWSJSON!
   users: AWSJSON!
