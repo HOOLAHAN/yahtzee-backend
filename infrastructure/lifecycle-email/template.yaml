@@ -27,6 +27,10 @@ Parameters:
     Type: String
     AllowedValues: ['true', 'false']
     Default: 'false'
+  EnableIncompleteSignup:
+    Type: String
+    AllowedValues: ['true', 'false']
+    Default: 'false'
   FromEmail:
     Type: String
     Default: Yahtzee <play@yahtzee.ijrhservices.co.uk>
@@ -107,6 +111,7 @@ Resources:
           ENABLE_FIRST_GAME: !Ref EnableFirstGame
           ENABLE_DOWNLOAD_APP: !Ref EnableDownloadApp
           ENABLE_INACTIVE_PLAYER: !Ref EnableInactivePlayer
+          ENABLE_INCOMPLETE_SIGNUP: !Ref EnableIncompleteSignup
           FROM_EMAIL: !Ref FromEmail
           REPLY_TO_EMAIL: !Ref ReplyToEmail
           CONFIGURATION_SET: yahtzee-marketing
@@ -117,10 +122,12 @@ Resources:
           FIRST_GAME_TEMPLATE: yahtzee-first-game
           DOWNLOAD_APP_TEMPLATE: yahtzee-download-app
           INACTIVE_PLAYER_TEMPLATE: yahtzee-inactive-player
+          INCOMPLETE_SIGNUP_TEMPLATE: yahtzee-incomplete-signup
           FIRST_GAME_DELAY_DAYS: '1'
           DOWNLOAD_APP_DELAY_DAYS: '7'
           INACTIVE_DELAY_DAYS: '30'
           INACTIVE_COOLDOWN_DAYS: '90'
+          INCOMPLETE_SIGNUP_DELAY_DAYS: '1'
 
   EvaluatorRule:
     Type: AWS::Events::Rule

@@ -249,6 +249,39 @@ async function sendCampaign({ sub, email, username, campaign, definition }) {
   return true;
 }
 
+async function sendIncompleteSignupReminder({ sub, email }) {
+  const campaign = 'INCOMPLETE_SIGNUP';
+  const lifecycleMessageId = await reserveCampaign(sub, campaign);
+  if (!lifecycleMessageId) return false;
+  const accountUrl = `https://yahtzee.ijrhservices.co.uk/account?utm_source=yahtzee_service&utm_medium=email&utm_campaign=incomplete_signup&lc=${encodeURIComponent(lifecycleMessageId)}`;
+  const response = await ses.send(new SendEmailCommand({
+    FromEmailAddress: process.env.FROM_EMAIL || 'Yahtzee <play@yahtzee.ijrhservices.co.uk>',
+    ReplyToAddresses: [process.env.REPLY_TO_EMAIL || 'accounts@yahtzee.ijrhservices.co.uk'],
+    Destination: { ToAddresses: [email] },
+    ConfigurationSetName: process.env.CONFIGURATION_SET || 'yahtzee-marketing',
+    EmailTags: [
+      { Name: 'campaign', Value: 'incomplete_signup' },
+      { Name: 'messageType', Value: 'account_service' },
+      { Name: 'environment', Value: process.env.STAGE || 'unknown' },
+      { Name: 'lifecycleMessageId', Value: lifecycleMessageId.replaceAll('-', '') },
+    ],
+    Content: { Template: { TemplateName: process.env.INCOMPLETE_SIGNUP_TEMPLATE || 'yahtzee-incomplete-signup', TemplateData: JSON.stringify({ accountUrl, lifecycleMessageId }) } },
+  }));
+  const sentAt = nowIso();
+  await db.send(new UpdateCommand({
+    TableName: tableName,
+    Key: campaignKey(sub, campaign),
+    UpdateExpression: 'SET sentAt = :sentAt, #status = :status, sesMessageId = :messageId, recipientHash = :hash, messageType = :messageType',
+    ExpressionAttributeNames: { '#status': 'status' },
+    ExpressionAttributeValues: { ':sentAt': sentAt, ':status': 'SENT', ':messageId': response.MessageId, ':hash': emailHash(email), ':messageType': 'ACCOUNT_SERVICE' },
+  }));
+  await db.send(new PutCommand({
+    TableName: tableName,
+    Item: { pk: `MESSAGE#${response.MessageId}`, sk: 'EVENTS', userId: sub, campaign, lifecycleMessageId, sentAt, messageType: 'ACCOUNT_SERVICE' },
+  }));
+  return true;
+}
+
 async function evaluateCampaigns() {
   const [users, games] = await Promise.all([listCognitoUsers(), allGames()]);
   const gamesByUser = new Map();
@@ -260,6 +293,17 @@ async function evaluateCampaigns() {
   const report = { evaluated: users.length, optedIn: 0, eligible: 0, sent: 0, dryRun: boolEnv('DRY_RUN'), campaigns: {} };
   for (const user of users) {
     const attributes = Object.fromEntries((user.Attributes || []).map(({ Name, Value }) => [Name, Value]));
+    if (user.UserStatus === 'UNCONFIRMED' && attributes.sub && attributes.email) {
+      const eligible = boolEnv('ENABLE_INCOMPLETE_SIGNUP')
+        && daysAgo(user.UserCreateDate?.toISOString()) >= Number(process.env.INCOMPLETE_SIGNUP_DELAY_DAYS || 1)
+        && !await alreadySent(attributes.sub, 'INCOMPLETE_SIGNUP');
+      if (eligible) {
+        report.eligible += 1;
+        report.campaigns.INCOMPLETE_SIGNUP = (report.campaigns.INCOMPLETE_SIGNUP || 0) + 1;
+        if (!report.dryRun && await sendIncompleteSignupReminder({ sub: attributes.sub, email: attributes.email })) report.sent += 1;
+      }
+      continue;
+    }
     if (user.UserStatus !== 'CONFIRMED' || !attributes.sub || !attributes.email) continue;
     const state = await getState(attributes.sub);
     if (state?.consentStatus !== 'OPT_IN' || state.hardBounceAt || state.complaintAt || state.unsubscribedAt) continue;

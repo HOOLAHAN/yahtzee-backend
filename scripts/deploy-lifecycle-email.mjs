@@ -19,11 +19,11 @@ const run = (command, args, options = {}) => {
 const temp = mkdtempSync(join(tmpdir(), `yahtzee-lifecycle-${stage}-`));
 const archive = join(temp, 'lifecycle.zip');
 try {
-  run('aws', ['cloudformation', 'deploy', '--stack-name', `YahtzeeLifecycleEmail-${stage}`, '--template-file', 'infrastructure/lifecycle-email/template.yaml', '--capabilities', 'CAPABILITY_NAMED_IAM', '--parameter-overrides', `Stage=${stage}`, `UserPoolId=${config.userPoolId}`, `GameResultTable=${config.gameTable}`, `AppSyncApiId=${config.apiId}`, 'DryRun=true', 'EnableFirstGame=false', 'EnableDownloadApp=false', 'EnableInactivePlayer=false', '--region', region]);
+  run('aws', ['cloudformation', 'deploy', '--stack-name', `YahtzeeLifecycleEmail-${stage}`, '--template-file', 'infrastructure/lifecycle-email/template.yaml', '--capabilities', 'CAPABILITY_NAMED_IAM', '--parameter-overrides', `Stage=${stage}`, `UserPoolId=${config.userPoolId}`, `GameResultTable=${config.gameTable}`, `AppSyncApiId=${config.apiId}`, 'DryRun=true', 'EnableFirstGame=false', 'EnableDownloadApp=false', 'EnableInactivePlayer=false', `EnableIncompleteSignup=${stage === 'sandbox' ? 'true' : 'false'}`, '--region', region]);
   run('zip', ['-j', archive, 'infrastructure/lifecycle-email/src/handler.mjs']);
   run('aws', ['lambda', 'update-function-code', '--function-name', `YahtzeeLifecycleService-${stage}`, '--zip-file', `fileb://${archive}`, '--region', region]);
   run('aws', ['lambda', 'wait', 'function-updated-v2', '--function-name', `YahtzeeLifecycleService-${stage}`, '--region', region]);
-  console.log(`Lifecycle stack deployed safely to ${stage}: dry-run on, campaigns off.`);
+  console.log(`Lifecycle stack deployed safely to ${stage}: dry-run on; incomplete-signup evaluation ${stage === 'sandbox' ? 'on' : 'off'}; marketing campaigns off.`);
 } finally {
   rmSync(temp, { recursive: true, force: true });
 }
