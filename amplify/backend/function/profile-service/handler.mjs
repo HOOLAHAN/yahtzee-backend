@@ -128,6 +128,22 @@ async function adminDashboard(claims) {
     const profile = profileByUser.get(userId);
     const games = (resultsByUser.get(userId) ?? []).sort((a, b) => String(b.completedAt?.S ?? '').localeCompare(String(a.completedAt?.S ?? '')));
     const scores = games.map((game) => Number(game.score?.N ?? 0));
+    const userLifecycle = lifecycleEvents.filter((event) => event.userId === userId).sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+    const userStarts = userLifecycle.filter((event) => event.action === 'STARTED');
+    const userAbandons = userLifecycle.filter((event) => ['RESET', 'MODE_SWITCH', 'REMOTE_EXIT'].includes(event.action));
+    const remoteGames = games.filter((game) => game.mode?.S === 'REMOTE');
+    const lifecycleModeBreakdown = [...lifecycleModes].map((mode) => ({
+      mode,
+      starts: userStarts.filter((event) => event.mode === mode).length,
+      abandons: userAbandons.filter((event) => event.mode === mode).length,
+      completions: userLifecycle.filter((event) => event.mode === mode && event.action === 'COMPLETED').length,
+    })).filter((item) => item.starts || item.abandons || item.completions);
+    const recentGames = games.slice(0, 10).map((game) => ({
+      id: game.id?.S ?? '', mode: game.mode?.S ?? '', score: Number(game.score?.N ?? 0), completedAt: game.completedAt?.S ?? '',
+      yahtzeeCount: Number(game.yahtzeeCount?.N ?? 0), earnedUpperBonus: game.earnedUpperBonus?.BOOL === true,
+      remoteOutcome: game.mode?.S === 'REMOTE' ? sessionFor(game).outcome ?? null : null,
+      opponent: game.mode?.S === 'REMOTE' ? sessionFor(game).opponent ?? null : null,
+    }));
     return {
       userId,
       email: attributes.email ?? '',
@@ -144,10 +160,21 @@ async function adminDashboard(claims) {
       gamesPlayed: games.length,
       soloGames: games.filter((game) => game.mode?.S === 'SOLO').length,
       dailyGames: games.filter((game) => game.mode?.S === 'DAILY').length,
-      remoteGames: games.filter((game) => game.mode?.S === 'REMOTE').length,
-      remoteWins: games.filter((game) => game.mode?.S === 'REMOTE' && sessionFor(game).outcome === 'WIN').length,
-      abandonedGames: explicitAbandons.filter((event) => event.userId === userId).length,
-      resetGames: explicitAbandons.filter((event) => event.userId === userId && event.action === 'RESET').length,
+      remoteGames: remoteGames.length,
+      remoteWins: remoteGames.filter((game) => sessionFor(game).outcome === 'WIN').length,
+      remoteDraws: remoteGames.filter((game) => sessionFor(game).outcome === 'DRAW').length,
+      remoteLosses: remoteGames.filter((game) => sessionFor(game).outcome === 'LOSS').length,
+      gameStarts: userStarts.length,
+      abandonedGames: userAbandons.length,
+      resetGames: userAbandons.filter((event) => event.action === 'RESET').length,
+      modeSwitchAbandons: userAbandons.filter((event) => event.action === 'MODE_SWITCH').length,
+      remoteExits: userAbandons.filter((event) => event.action === 'REMOTE_EXIT').length,
+      averageAbandonRound: userAbandons.length ? Math.round(userAbandons.reduce((sum, event) => sum + event.round, 0) / userAbandons.length) : 0,
+      lastAbandonedAt: userAbandons[0]?.occurredAt ?? null,
+      lifecyclePlatforms: [...new Set(userLifecycle.map((event) => event.platform).filter(Boolean))],
+      lifecycleModeBreakdown,
+      recentAbandonments: userAbandons.slice(0, 10),
+      recentGames,
       bestScore: scores.length ? Math.max(...scores) : null,
       averageScore: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
       pushNotificationsEnabled: profile?.pushNotificationsEnabled?.BOOL === true && expoTokenPattern.test(profile?.expoPushToken?.S ?? ''),
