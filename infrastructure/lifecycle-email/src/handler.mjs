@@ -221,6 +221,8 @@ async function sendCampaign({ sub, email, username, campaign, definition }) {
   if (!lifecycleMessageId) return false;
   const appStoreUrl = process.env.APP_STORE_URL || 'https://apps.apple.com/gb/app/yahtzee-hub/id6794910138';
   const webUrl = `https://yahtzee.ijrhservices.co.uk/?utm_source=yahtzee_lifecycle&utm_medium=email&utm_campaign=${campaign.toLowerCase()}&lc=${encodeURIComponent(lifecycleMessageId)}`;
+  const appPath = process.env.STAGE === 'sandbox' ? 'play-dev' : 'play';
+  const appUrl = `https://yahtzee.ijrhservices.co.uk/${appPath}?utm_source=yahtzee_lifecycle&utm_medium=email&utm_campaign=${campaign.toLowerCase()}&lc=${encodeURIComponent(lifecycleMessageId)}`;
   const response = await ses.send(new SendEmailCommand({
     FromEmailAddress: process.env.FROM_EMAIL || 'Yahtzee <play@yahtzee.ijrhservices.co.uk>',
     ReplyToAddresses: [process.env.REPLY_TO_EMAIL || 'accounts@yahtzee.ijrhservices.co.uk'],
@@ -232,7 +234,7 @@ async function sendCampaign({ sub, email, username, campaign, definition }) {
       { Name: 'environment', Value: process.env.STAGE || 'unknown' },
       { Name: 'lifecycleMessageId', Value: lifecycleMessageId.replaceAll('-', '') },
     ],
-    Content: { Template: { TemplateName: definition.template, TemplateData: JSON.stringify({ username, webUrl, appStoreUrl, lifecycleMessageId }) } },
+    Content: { Template: { TemplateName: definition.template, TemplateData: JSON.stringify({ username, appUrl, webUrl, appStoreUrl, lifecycleMessageId }) } },
   }));
   const sentAt = nowIso();
   await db.send(new UpdateCommand({
