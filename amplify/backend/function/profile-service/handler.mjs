@@ -266,6 +266,9 @@ async function getProfile(sub) {
     dailyReminderEnabled: item.dailyReminderEnabled?.BOOL ?? false,
     dailyReminderHour: Number(item.dailyReminderHour?.N ?? 19),
     pushNotificationsEnabled: item.pushNotificationsEnabled?.BOOL ?? false,
+    notifyTurns: item.notifyTurns?.BOOL ?? true,
+    notifyInvites: item.notifyInvites?.BOOL ?? true,
+    notifyGameUpdates: item.notifyGameUpdates?.BOOL ?? true,
     expoPushToken: item.expoPushToken?.S ?? '',
   } : null;
 }
@@ -642,9 +645,11 @@ async function saveLiveGame(state, expectedVersion) {
   return next;
 }
 
-async function notifyLivePlayer(userId, title, body, gameId, actorUserId) {
+async function notifyLivePlayer(userId, title, body, gameId, actorUserId, category = 'update') {
   if (!userId) return;
   let profiles = await notificationProfiles([userId]);
+  const flag = category === 'turn' ? 'notifyTurns' : category === 'invite' ? 'notifyInvites' : 'notifyGameUpdates';
+  profiles = profiles.filter((profile) => profile[flag]?.BOOL !== false);
   if (actorUserId) {
     const actorProfile = await getProfile(actorUserId);
     const actorToken = actorProfile?.expoPushToken;
@@ -691,7 +696,7 @@ async function challengeLiveGame(sub, claims, rawUserId, rawUsername) {
   const hostUsername = hostProfile?.username || claims.preferred_username || claims.email || 'Player';
   const state = { id, code: '', status: 'INVITED', hostUserId: sub, hostUsername, guestUserId, guestUsername: guestProfile.username, currentUserId: sub, round: 1, dice: [1, 1, 1, 1, 1], held: [], rollsLeft: 3, hasRolled: false, selectedCategory: null, hostScores: [], guestScores: [], winnerUserId: null, endedByUserId: null, createdAt: now, updatedAt: now };
   await db.send(new PutItemCommand({ TableName: table, Item: { pk: s(liveGameKey(id)), state: s(JSON.stringify(state)), version: { N: '1' }, expiresAt: { N: String(Math.floor(Date.now() / 1000) + 7 * 86400) } }, ConditionExpression: 'attribute_not_exists(pk)' }));
-  try { await notifyLivePlayer(guestUserId, 'Game challenge', `${hostUsername} challenged you to a Remote Game.`, id, sub); } catch { /* The in-app invitation remains available if push delivery fails. */ }
+  try { await notifyLivePlayer(guestUserId, 'Game challenge', `${hostUsername} challenged you to a Remote Game.`, id, sub, 'invite'); } catch { /* The in-app invitation remains available if push delivery fails. */ }
   return liveResponse(state);
 }
 
@@ -712,7 +717,7 @@ async function createLiveRematch(previous, requester) {
         { Put: { TableName: table, Item: { pk: s(liveCodeKey(code)), gameId: s(id), expiresAt: { N: String(Math.floor(Date.now() / 1000) + 24 * 3600) } }, ConditionExpression: 'attribute_not_exists(pk)' } },
       ] }));
       const opponentId = requester === state.hostUserId ? state.guestUserId : state.hostUserId;
-      try { await notifyLivePlayer(opponentId, 'Rematch ready', `${requester === state.hostUserId ? state.hostUsername : state.guestUsername} started another game.`, state.id, requester); } catch { /* The match is created even if push delivery is unavailable. */ }
+      try { await notifyLivePlayer(opponentId, 'Rematch ready', `${requester === state.hostUserId ? state.hostUsername : state.guestUsername} started another game.`, state.id, requester, 'invite'); } catch { /* The match is created even if push delivery is unavailable. */ }
       return liveResponse(state);
     } catch (error) {
       if (error.name !== 'TransactionCanceledException') throw error;
@@ -733,7 +738,7 @@ async function joinLiveGame(sub, claims, rawCode) {
   if (current.state.hostUserId === sub) throw new Error('Share this code with another signed-in player.');
   const profile = await getProfile(sub);
   const next = await saveLiveGame({ ...current.state, status: 'ACTIVE', guestUserId: sub, guestUsername: profile?.username || claims.preferred_username || claims.email || 'Player', currentUserId: current.state.hostUserId }, current.version);
-  await notifyLivePlayer(next.hostUserId, `${next.guestUsername} joined your game`, 'Your first turn is ready.', next.id, sub);
+    await notifyLivePlayer(next.hostUserId, `${next.guestUsername} joined your game`, 'Your first turn is ready.', next.id, sub, 'turn');
   return liveResponse(next);
 }
 
@@ -778,7 +783,7 @@ async function updateLiveGame(sub, id, rawAction) {
     if (state.status !== 'INVITED' || state.guestUserId !== sub) throw new Error('This challenge is no longer available.');
     const accepted = Boolean(action.accept);
     const next = await saveLiveGame({ ...state, status: accepted ? 'ACTIVE' : 'DECLINED', endedByUserId: accepted ? null : sub, processedActionIds: actionId ? [...(state.processedActionIds || []), actionId].slice(-40) : state.processedActionIds }, current.version);
-    try { await notifyLivePlayer(next.hostUserId, accepted ? 'Challenge accepted' : 'Challenge declined', `${next.guestUsername} ${accepted ? 'accepted' : 'declined'} your Remote Game challenge.`, next.id, sub); } catch { /* The response is saved even if push delivery fails. */ }
+    try { await notifyLivePlayer(next.hostUserId, accepted ? 'Challenge accepted' : 'Challenge declined', `${next.guestUsername} ${accepted ? 'accepted' : 'declined'} your Remote Game challenge.`, next.id, sub, 'invite'); } catch { /* The response is saved even if push delivery fails. */ }
     return liveResponse(next);
   }
   if (action?.type === 'REMATCH') return await createLiveRematch(state, sub);
@@ -826,7 +831,13 @@ async function updateLiveGame(sub, id, rawAction) {
   const saved = await saveLiveGame(next, current.version);
   if (action.type === 'LOCK_CATEGORY' && saved.status === 'ACTIVE') {
     const actor = sub === saved.hostUserId ? saved.hostUsername : saved.guestUsername;
-    await notifyLivePlayer(saved.currentUserId, 'Your turn', `${actor} finished Round ${Math.max(saved.hostScores.length, saved.guestScores.length)}.`, saved.id, sub);
+    await notifyLivePlayer(saved.currentUserId, 'Your turn', `${actor} finished Round ${Math.max(saved.hostScores.length, saved.guestScores.length)}.`, saved.id, sub, 'turn');
+  }
+  if (action.type === 'LOCK_CATEGORY' && saved.status === 'COMPLETED') {
+    const opponentId = sub === saved.hostUserId ? saved.guestUserId : saved.hostUserId;
+    const hostTotal = liveTotal(saved.hostScores); const guestTotal = liveTotal(saved.guestScores);
+    const result = saved.winnerUserId === null ? 'It’s a draw.' : saved.winnerUserId === opponentId ? 'You won!' : 'Your opponent won.';
+    try { await notifyLivePlayer(opponentId, 'Remote game finished', `${result} ${saved.hostUsername} ${hostTotal}–${guestTotal} ${saved.guestUsername}.`, saved.id, sub, 'update'); } catch { /* The final score is saved even if push delivery fails. */ }
   }
   return liveResponse(saved);
 }
@@ -888,6 +899,7 @@ export const handler = async (event) => {
       dailyReminderEnabled: false,
       dailyReminderHour: 19,
       pushNotificationsEnabled: false,
+      notifyTurns: true, notifyInvites: true, notifyGameUpdates: true,
       expoPushToken: '',
     };
     return { ...profile, role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
@@ -915,11 +927,15 @@ export const handler = async (event) => {
     const current = await getProfile(sub);
     if (!current) throw new Error('Create your profile before saving preferences.');
     const hour = Math.max(0, Math.min(23, Number(event.args.dailyReminderHour)));
-    const profile = { ...current, scoreSuggestionsEnabled: Boolean(event.args.scoreSuggestionsEnabled), dailyReminderEnabled: Boolean(event.args.dailyReminderEnabled), dailyReminderHour: hour };
+    const profile = { ...current, scoreSuggestionsEnabled: Boolean(event.args.scoreSuggestionsEnabled), dailyReminderEnabled: Boolean(event.args.dailyReminderEnabled), dailyReminderHour: hour,
+      notifyTurns: event.args.notifyTurns == null ? current.notifyTurns : Boolean(event.args.notifyTurns),
+      notifyInvites: event.args.notifyInvites == null ? current.notifyInvites : Boolean(event.args.notifyInvites),
+      notifyGameUpdates: event.args.notifyGameUpdates == null ? current.notifyGameUpdates : Boolean(event.args.notifyGameUpdates) };
     await db.send(new TransactWriteItemsCommand({ TransactItems: [{ Put: { TableName: table, Item: {
       pk: s(profileKey(sub)), userId: s(sub), username: s(profile.username), usernameNormalised: s(normalise(profile.username)), firstName: s(profile.firstName), lastName: s(profile.lastName),
       scoreSuggestionsEnabled: { BOOL: profile.scoreSuggestionsEnabled }, dailyReminderEnabled: { BOOL: profile.dailyReminderEnabled }, dailyReminderHour: { N: String(profile.dailyReminderHour) },
       pushNotificationsEnabled: { BOOL: current.pushNotificationsEnabled }, ...(current.expoPushToken ? { expoPushToken: s(current.expoPushToken) } : {}),
+      notifyTurns: { BOOL: profile.notifyTurns }, notifyInvites: { BOOL: profile.notifyInvites }, notifyGameUpdates: { BOOL: profile.notifyGameUpdates },
     } } }] }));
     return { ...profile, role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
   }
@@ -934,6 +950,7 @@ export const handler = async (event) => {
       pk: s(profileKey(sub)), userId: s(sub), username: s(profile.username), usernameNormalised: s(normalise(profile.username)), firstName: s(profile.firstName), lastName: s(profile.lastName),
       scoreSuggestionsEnabled: { BOOL: profile.scoreSuggestionsEnabled }, dailyReminderEnabled: { BOOL: profile.dailyReminderEnabled }, dailyReminderHour: { N: String(profile.dailyReminderHour) },
       pushNotificationsEnabled: { BOOL: profile.pushNotificationsEnabled }, ...(profile.expoPushToken ? { expoPushToken: s(profile.expoPushToken) } : {}),
+      notifyTurns: { BOOL: profile.notifyTurns }, notifyInvites: { BOOL: profile.notifyInvites }, notifyGameUpdates: { BOOL: profile.notifyGameUpdates },
     } }));
     return { ...profile, role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
   }
@@ -958,6 +975,7 @@ export const handler = async (event) => {
       usernameNormalised: s(normalise(username)), firstName: s(firstName), lastName: s(lastName),
       scoreSuggestionsEnabled: { BOOL: current?.scoreSuggestionsEnabled ?? true }, dailyReminderEnabled: { BOOL: current?.dailyReminderEnabled ?? false }, dailyReminderHour: { N: String(current?.dailyReminderHour ?? 19) },
       pushNotificationsEnabled: { BOOL: current?.pushNotificationsEnabled ?? false }, ...(current?.expoPushToken ? { expoPushToken: s(current.expoPushToken) } : {}),
+      notifyTurns: { BOOL: current?.notifyTurns ?? true }, notifyInvites: { BOOL: current?.notifyInvites ?? true }, notifyGameUpdates: { BOOL: current?.notifyGameUpdates ?? true },
     } } },
   ];
   if (current && normalise(current.username) !== normalise(username)) {
@@ -987,5 +1005,5 @@ export const handler = async (event) => {
 
   if (!current || current.username !== username) await Promise.all([renameScores(sub, username), renameGameResults(sub, username)]);
   if (!current) await notifyAdminsOfNewUser(username);
-  return { userId: sub, username, firstName, lastName, scoreSuggestionsEnabled: current?.scoreSuggestionsEnabled ?? true, dailyReminderEnabled: current?.dailyReminderEnabled ?? false, dailyReminderHour: current?.dailyReminderHour ?? 19, pushNotificationsEnabled: current?.pushNotificationsEnabled ?? false, expoPushToken: current?.expoPushToken ?? '', role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
+  return { userId: sub, username, firstName, lastName, scoreSuggestionsEnabled: current?.scoreSuggestionsEnabled ?? true, dailyReminderEnabled: current?.dailyReminderEnabled ?? false, dailyReminderHour: current?.dailyReminderHour ?? 19, pushNotificationsEnabled: current?.pushNotificationsEnabled ?? false, notifyTurns: current?.notifyTurns ?? true, notifyInvites: current?.notifyInvites ?? true, notifyGameUpdates: current?.notifyGameUpdates ?? true, expoPushToken: current?.expoPushToken ?? '', role: isAdmin(claims) ? 'ADMIN' : 'PLAYER' };
 };

@@ -75,7 +75,7 @@ type Mutation {
   submitGameResult(input: SubmitGameResultInput!): GameResult @aws_cognito_user_pools
   submitDailyRoundProgress(challengeDate: AWSDate!, round: Int!, score: Int!): DailyRoundStanding! @aws_cognito_user_pools
   updateMyProfile(username: String!, firstName: String!, lastName: String!): UserProfile @aws_cognito_user_pools
-  updateMyPreferences(scoreSuggestionsEnabled: Boolean!, dailyReminderEnabled: Boolean!, dailyReminderHour: Int!): UserProfile @aws_cognito_user_pools
+  updateMyPreferences(scoreSuggestionsEnabled: Boolean!, dailyReminderEnabled: Boolean!, dailyReminderHour: Int!, notifyTurns: Boolean, notifyInvites: Boolean, notifyGameUpdates: Boolean): UserProfile @aws_cognito_user_pools
   updateMyPushNotifications(enabled: Boolean!, expoPushToken: String): UserProfile @aws_cognito_user_pools
   updateMyLifecycleEmailPreference(enabled: Boolean!, consentVersion: String!, source: ClientPlatform!): LifecycleEmailPreference! @aws_cognito_user_pools
   recordClientActivity(platform: ClientPlatform!): LifecycleEmailPreference! @aws_cognito_user_pools
@@ -162,6 +162,9 @@ type UserProfile @aws_cognito_user_pools {
   dailyReminderEnabled: Boolean!
   dailyReminderHour: Int!
   pushNotificationsEnabled: Boolean!
+  notifyTurns: Boolean!
+  notifyInvites: Boolean!
+  notifyGameUpdates: Boolean!
   role: String!
 }
 
