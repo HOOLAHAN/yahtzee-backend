@@ -142,12 +142,13 @@ async function adminDashboard(claims) {
       abandons: userAbandons.filter((event) => event.mode === mode).length,
       completions: userLifecycle.filter((event) => event.mode === mode && event.action === 'COMPLETED').length,
     })).filter((item) => item.starts || item.abandons || item.completions);
-    const recentGames = games.slice(0, 10).map((game) => ({
+    const gameHistory = games.map((game) => ({
       id: game.id?.S ?? '', mode: game.mode?.S ?? '', score: Number(game.score?.N ?? 0), completedAt: game.completedAt?.S ?? '',
       yahtzeeCount: Number(game.yahtzeeCount?.N ?? 0), earnedUpperBonus: game.earnedUpperBonus?.BOOL === true,
       remoteOutcome: game.mode?.S === 'REMOTE' ? sessionFor(game).outcome ?? null : null,
       opponent: game.mode?.S === 'REMOTE' ? sessionFor(game).opponent ?? null : null,
     }));
+    const recentGames = gameHistory.slice(0, 10);
     return {
       userId,
       email: attributes.email ?? '',
@@ -179,6 +180,7 @@ async function adminDashboard(claims) {
       lifecycleModeBreakdown,
       recentAbandonments: userAbandons.slice(0, 10),
       recentGames,
+      gameHistory,
       bestScore: scores.length ? Math.max(...scores) : null,
       averageScore: scores.length ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : null,
       pushNotificationsEnabled: profile?.pushNotificationsEnabled?.BOOL === true && expoTokenPattern.test(profile?.expoPushToken?.S ?? ''),
