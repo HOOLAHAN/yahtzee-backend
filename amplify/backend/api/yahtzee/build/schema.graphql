@@ -92,6 +92,7 @@ type Query {
   myLifecycleEmailPreference: LifecycleEmailPreference! @aws_cognito_user_pools
   usernameAvailable(username: String!): Boolean! @aws_api_key
   adminDashboard: AdminDashboard! @aws_cognito_user_pools
+  adminEmailHistory: AWSJSON! @aws_cognito_user_pools
   liveGame(gameId: ID!): LiveGame! @aws_cognito_user_pools
   myLiveGames: [LiveGame!]! @aws_cognito_user_pools
   getScore(id: ID!): Score @aws_api_key @aws_cognito_user_pools

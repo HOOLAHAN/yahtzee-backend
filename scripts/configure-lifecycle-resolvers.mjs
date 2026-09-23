@@ -16,7 +16,7 @@ const existingSource = spawnSync('aws', ['appsync', 'get-data-source', '--api-id
 const sourceAction = existingSource.status === 0 ? 'update-data-source' : 'create-data-source';
 const source = spawnSync('aws', ['appsync', sourceAction, '--api-id', apiId, '--name', dataSourceName, '--type', 'AWS_LAMBDA', '--service-role-arn', values.AppSyncRoleArn, '--lambda-config', `lambdaFunctionArn=${values.FunctionArn}`, '--region', region], { encoding: 'utf8', env });
 if (source.status !== 0) throw new Error(source.stderr || 'Unable to configure lifecycle data source.');
-for (const [type, field] of [['Query', 'myLifecycleEmailPreference'], ['Mutation', 'updateMyLifecycleEmailPreference'], ['Mutation', 'recordClientActivity'], ['Mutation', 'deleteMyLifecycleEmailData']]) {
+for (const [type, field] of [['Query', 'myLifecycleEmailPreference'], ['Query', 'adminEmailHistory'], ['Mutation', 'updateMyLifecycleEmailPreference'], ['Mutation', 'recordClientActivity'], ['Mutation', 'deleteMyLifecycleEmailData']]) {
   const request = readFileSync(`amplify/backend/api/yahtzee/resolvers/${type}.${field}.req.vtl`, 'utf8');
   const response = readFileSync(`amplify/backend/api/yahtzee/resolvers/${type}.${field}.res.vtl`, 'utf8');
   const lookup = spawnSync('aws', ['appsync', 'get-resolver', '--api-id', apiId, '--type-name', type, '--field-name', field, '--region', region], { encoding: 'utf8', env });

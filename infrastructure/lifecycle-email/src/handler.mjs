@@ -32,6 +32,13 @@ function claimsFrom(event) {
   return event?.identity?.claims || {};
 }
 
+function isAdmin(event) {
+  const groups = claimsFrom(event)?.['cognito:groups'];
+  return Array.isArray(groups)
+    ? groups.includes('Admin')
+    : String(groups || '').split(',').some((group) => group.trim() === 'Admin');
+}
+
 function caller(event) {
   const claims = claimsFrom(event);
   const sub = claims.sub;
@@ -153,6 +160,59 @@ async function listCognitoUsers() {
     PaginationToken = page.PaginationToken;
   } while (PaginationToken);
   return users;
+}
+
+async function adminEmailHistory(event) {
+  if (!isAdmin(event)) throw new Error('Admin access required.');
+  const [users, messages] = await Promise.all([
+    listCognitoUsers(),
+    (async () => {
+      const items = [];
+      let ExclusiveStartKey;
+      do {
+        const page = await db.send(new ScanCommand({
+          TableName: tableName,
+          FilterExpression: 'begins_with(pk, :message) AND sk = :events',
+          ExpressionAttributeValues: { ':message': 'MESSAGE#', ':events': 'EVENTS' },
+          ExclusiveStartKey,
+        }));
+        items.push(...(page.Items || []));
+        ExclusiveStartKey = page.LastEvaluatedKey;
+      } while (ExclusiveStartKey);
+      return items;
+    })(),
+  ]);
+  const userById = new Map(users.map((user) => {
+    const attributes = Object.fromEntries((user.Attributes || []).map(({ Name, Value }) => [Name, Value || '']));
+    return [attributes.sub || user.Username || '', attributes];
+  }));
+  const statusFor = (item) => item.complaintAt ? 'COMPLAINT'
+    : item.hardBounceAt ? 'BOUNCED'
+    : item.renderingFailedAt ? 'FAILED'
+    : item.deliveredAt ? 'DELIVERED'
+    : 'SENT';
+  return messages
+    .sort((a, b) => String(b.sentAt || '').localeCompare(String(a.sentAt || '')))
+    .slice(0, 200)
+    .map((item) => {
+      const user = userById.get(item.userId) || {};
+      return {
+        id: String(item.pk || '').replace(/^MESSAGE#/, ''),
+        userId: item.userId || '',
+        recipient: user.email || '',
+        username: user.preferred_username || '',
+        campaign: item.campaign || 'UNKNOWN',
+        messageType: item.messageType || 'MARKETING',
+        status: statusFor(item),
+        sentAt: item.sentAt || null,
+        deliveredAt: item.deliveredAt || null,
+        clickedAt: item.clickedAt || null,
+        bouncedAt: item.hardBounceAt || null,
+        complaintAt: item.complaintAt || null,
+        renderingFailedAt: item.renderingFailedAt || null,
+        lastEventType: item.lastEventType || null,
+      };
+    });
 }
 
 async function allGames() {
@@ -361,6 +421,7 @@ export const handler = async (event) => {
   if (!tableName) throw new Error('STATE_TABLE is not configured.');
   const field = event?.info?.fieldName;
   if (field === 'myLifecycleEmailPreference') return myPreference(event);
+  if (field === 'adminEmailHistory') return adminEmailHistory(event);
   if (field === 'updateMyLifecycleEmailPreference') return updatePreference(event);
   if (field === 'recordClientActivity') return recordActivity(event);
   if (field === 'deleteMyLifecycleEmailData') return deleteLifecycleData(event);
