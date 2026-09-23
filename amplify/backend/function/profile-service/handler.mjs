@@ -107,8 +107,8 @@ async function adminDashboard(claims) {
   const remoteMatchIds = new Set(remoteResults.map((item) => sessionFor(item).liveGameId).filter(Boolean));
   const recent7 = results.filter((item) => completedAt(item) >= last7);
   const recent30 = results.filter((item) => completedAt(item) >= last30);
-  const dailyActivity = Array.from({ length: 14 }, (_, index) => {
-    const date = new Date(startOfToday); date.setUTCDate(date.getUTCDate() - (13 - index));
+  const dailyActivity = Array.from({ length: 365 }, (_, index) => {
+    const date = new Date(startOfToday); date.setUTCDate(date.getUTCDate() - (364 - index));
     const key = date.toISOString().slice(0, 10);
     const games = results.filter((item) => item.completedAt?.S?.slice(0, 10) === key);
     return { date: key, games: games.length, players: new Set(games.map((item) => item.userId?.S).filter(Boolean)).size };
